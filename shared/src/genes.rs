@@ -156,10 +156,10 @@ impl Genome {
     /// Higher strength, speed, and size increase cost
     /// Higher efficiency decreases cost
     pub fn energy_cost(&self) -> f64 {
-        let base_cost = 1.0;
+        let base_cost = 0.2; // Reduced from 1.0 to 0.2
         let trait_cost =
-            self.strength * 2.0 + self.speed * 1.5 + self.size * 1.8 + self.reproduction * 0.5;
-        let efficiency_multiplier = 2.0 - self.efficiency; // 1.0 to 2.0
+            self.strength * 0.3 + self.speed * 0.2 + self.size * 0.25 + self.reproduction * 0.1; // Reduced multipliers by ~85%
+        let efficiency_multiplier = 1.5 - (self.efficiency * 0.5); // Range 1.0 to 1.5 (was 1.0 to 2.0)
 
         base_cost + trait_cost * efficiency_multiplier
     }

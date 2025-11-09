@@ -33,7 +33,7 @@ impl Creature {
             id: Uuid::new_v4(),
             genome,
             genome_id,
-            energy: 50.0, // Starting energy
+            energy: 100.0, // Starting energy - increased from 50.0 for better survival
             age: 0,
             x,
             y,
@@ -65,12 +65,12 @@ impl Creature {
     /// Reproduce with another creature, consuming energy
     /// Child spawns at the average position of the two parents
     pub fn reproduce(&mut self, other: &mut Creature, mutation_rate: f64) -> Option<Creature> {
-        if !self.can_reproduce(100.0) || !other.can_reproduce(100.0) {
+        if !self.can_reproduce(60.0) || !other.can_reproduce(60.0) {
             return None;
         }
 
-        // Reproduce costs energy
-        let cost = 50.0;
+        // Reproduce costs energy - reduced from 50.0 to 20.0 for easier reproduction
+        let cost = 20.0;
         self.energy -= cost;
         other.energy -= cost;
 
@@ -183,7 +183,7 @@ mod tests {
         let genome = Genome::default();
         let genome_id = Uuid::new_v4();
         let creature = Creature::new(genome, genome_id, 10, 10);
-        assert_eq!(creature.energy, 50.0);
+        assert_eq!(creature.energy, 100.0);
         assert_eq!(creature.age, 0);
         assert_eq!(creature.x, 10);
         assert_eq!(creature.y, 10);
@@ -236,7 +236,7 @@ mod tests {
         let mut parent1 = Creature::new(genome.clone(), genome_id, 10, 10);
         let mut parent2 = Creature::new(genome, genome_id, 15, 15);
 
-        parent1.energy = 50.0;
+        parent1.energy = 50.0; // Below the 60.0 threshold
         parent2.energy = 50.0;
 
         let child = parent1.reproduce(&mut parent2, 0.1);

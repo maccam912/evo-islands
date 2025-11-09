@@ -24,9 +24,9 @@ impl Default for IslandConfig {
             world_height: 300,
             max_steps: 3000,
             mutation_rate: 0.05,
-            plant_density: 0.05, // 5% of tiles are plants
-            food_density: 0.02,  // 2% of tiles are food
-            reproduction_threshold: 100.0,
+            plant_density: 0.08, // Increased from 5% to 8% for more food availability
+            food_density: 0.04,  // Increased from 2% to 4% for more food availability
+            reproduction_threshold: 60.0, // Reduced from 100.0 to match creature.rs changes
             max_age: 1000,
         }
     }
@@ -270,9 +270,9 @@ impl Island {
         self.creatures[winner_idx].add_energy(food_eaten as f64);
         self.creatures[winner_idx].food_eaten += food_eaten;
 
-        // Losers take damage equal to winner's combat power
+        // Losers take reduced damage (25% of winner's combat power instead of 100%)
         for (loser_idx, _) in combatants.iter().skip(1) {
-            self.creatures[*loser_idx].energy -= winner_power;
+            self.creatures[*loser_idx].energy -= winner_power * 0.25;
         }
     }
 
