@@ -94,16 +94,18 @@ impl GenePool {
         }
 
         // Fill remaining with random extinct genomes
+        // Scope RNG so it is dropped before any subsequent await
         use rand::seq::SliceRandom;
-        let mut rng = rand::thread_rng();
-
-        let mut chosen_extinct: Vec<_> = extinct
-            .choose_multiple(&mut rng, 5)
-            .map(|e| GenomeWithId {
-                genome_id: e.genome_id,
-                genome: e.genome.clone(),
-            })
-            .collect();
+        let mut chosen_extinct: Vec<_> = {
+            let mut rng = rand::thread_rng();
+            extinct
+                .choose_multiple(&mut rng, 5)
+                .map(|e| GenomeWithId {
+                    genome_id: e.genome_id,
+                    genome: e.genome.clone(),
+                })
+                .collect()
+        };
 
         seeds.append(&mut chosen_extinct);
 
