@@ -152,10 +152,17 @@ impl World {
                 {
                     if *current_food < *max_food {
                         if *regrowth_timer > 0 {
+                            // Count down and regrow exactly when hitting zero
                             *regrowth_timer -= 1;
+                            if *regrowth_timer == 0 {
+                                *current_food += 1;
+                                if *current_food < *max_food {
+                                    *regrowth_timer = 10;
+                                }
+                            }
                         } else {
+                            // Immediate regrowth path when timer already zero
                             *current_food += 1;
-                            // Reset timer for next growth
                             if *current_food < *max_food {
                                 *regrowth_timer = 10;
                             }
