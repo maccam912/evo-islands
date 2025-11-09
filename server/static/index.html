@@ -208,6 +208,11 @@
             </div>
         </div>
 
+        <div class="creatures-section">
+            <h2 class="section-title">📈 Global Fitness Trend</h2>
+            <canvas id="fitness-canvas" width="1000" height="220" style="width:100%; height:220px; background:rgba(0,0,0,0.15); border-radius:8px; border:1px solid rgba(255,255,255,0.15);"></canvas>
+        </div>
+
         <div class="creatures-section" id="live-sim-section">
             <h2 class="section-title">🎥 Live Simulation (Local Preview)</h2>
             <div style="display:flex; gap:20px; flex-wrap: wrap; align-items: flex-start;">
@@ -222,6 +227,10 @@
                             <button id="btn-step" disabled style="padding:8px 14px;border-radius:6px;border:none;background:#fbbf24;color:#3a2a00;font-weight:600;cursor:pointer;">Step</button>
                             <button id="btn-reset" disabled style="padding:8px 14px;border-radius:6px;border:none;background:#f87171;color:#3d0b0b;font-weight:600;cursor:pointer;">Reset</button>
                         </div>
+                        <label style="display:flex; align-items:center; gap:8px; margin:6px 0 12px 0; font-size:0.95em;">
+                            <input id="toggle-food" type="checkbox" checked>
+                            <span>Show food density</span>
+                        </label>
                         <div style="margin:10px 0 6px 0; opacity:0.9;">Speed</div>
                         <input id="speed-range" type="range" min="1" max="10" step="1" value="1" style="width:100%;">
                         <div style="display:flex; justify-content:space-between; font-size:0.9em; opacity:0.85;"><span>1x</span><span>10x</span></div>
@@ -349,6 +358,17 @@
                         .map((g, i) => renderCreature(g.genome, g.fitness, i + 1))
                         .join('');
                 }
+
+                // Record fitness history of top 10 genomes
+                if (stats.best_genomes && stats.best_genomes.length > 0) {
+                    const top = stats.best_genomes.slice(0, 10);
+                    const avg = top.reduce((s, g) => s + (g.fitness || 0), 0) / top.length;
+                    const t = stats.uptime_seconds || 0;
+                    if (fitnessHistory.length === 0 || fitnessHistory[fitnessHistory.length - 1].t !== t) {
+                        fitnessHistory.push({ t, v: avg });
+                        renderFitnessChart();
+                    }
+                }
             } catch (error) {
                 console.error('Failed to fetch stats:', error);
             }
@@ -357,6 +377,82 @@
         // Update stats every 2 seconds
         updateStats();
         setInterval(updateStats, 2000);
+
+        // Fitness trend chart
+        const fitnessCanvas = document.getElementById('fitness-canvas');
+        const fitnessCtx = fitnessCanvas.getContext('2d');
+        const fitnessHistory = [];
+
+        function renderFitnessChart() {
+            const ctx = fitnessCtx;
+            const w = fitnessCanvas.width;
+            const h = fitnessCanvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            if (fitnessHistory.length === 0) return;
+
+            const margin = { left: 50, right: 10, top: 10, bottom: 28 };
+            const innerW = w - margin.left - margin.right;
+            const innerH = h - margin.top - margin.bottom;
+
+            const tMin = fitnessHistory[0].t;
+            const tMax = fitnessHistory[fitnessHistory.length - 1].t || (tMin + 1);
+            const tSpan = Math.max(1, tMax - tMin);
+
+            let vMax = 0;
+            for (const p of fitnessHistory) vMax = Math.max(vMax, p.v);
+            // Give a headroom and a sensible default upper bound
+            vMax = Math.max(1.0, vMax * 1.1);
+
+            // Axes
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 1;
+            // X axis
+            ctx.beginPath();
+            ctx.moveTo(margin.left, h - margin.bottom);
+            ctx.lineTo(w - margin.right, h - margin.bottom);
+            ctx.stroke();
+            // Y axis
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, h - margin.bottom);
+            ctx.stroke();
+
+            // Y ticks (0, vMax)
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.font = '12px Segoe UI, sans-serif';
+            const y0 = h - margin.bottom;
+            const y1 = margin.top;
+            ctx.fillText('0.0', 10, y0);
+            ctx.fillText(vMax.toFixed(2), 10, y1 + 4);
+
+            // Line path
+            ctx.strokeStyle = '#6ee7b7';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < fitnessHistory.length; i++) {
+                const p = fitnessHistory[i];
+                const x = margin.left + ((p.t - tMin) / tSpan) * innerW;
+                const y = margin.top + (1 - Math.min(p.v / vMax, 1)) * innerH;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Area fill for a nicer look
+            ctx.lineTo(margin.left + innerW, y0);
+            ctx.lineTo(margin.left, y0);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(110, 231, 183, 0.15)';
+            ctx.fill();
+
+            // Latest value label
+            const last = fitnessHistory[fitnessHistory.length - 1];
+            const lx = margin.left + ((last.t - tMin) / tSpan) * innerW;
+            const ly = margin.top + (1 - Math.min(last.v / vMax, 1)) * innerH;
+            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+            const label = `avg top10: ${last.v.toFixed(3)}`;
+            ctx.fillText(label, Math.min(lx + 8, w - margin.right - ctx.measureText(label).width), Math.max(ly - 8, margin.top + 12));
+        }
 
         // -------------------
         // Local Live Simulation
@@ -369,6 +465,7 @@
         const btnStep = document.getElementById('btn-step');
         const btnReset = document.getElementById('btn-reset');
         const speedRange = document.getElementById('speed-range');
+        const toggleFood = document.getElementById('toggle-food');
         const stepLabel = document.getElementById('sim-step-label');
         const stepProgress = document.getElementById('sim-step-progress');
         const creaturesLabel = document.getElementById('sim-creatures-label');
@@ -651,6 +748,26 @@
             // Scale world to canvas
             const sx = canvas.width / Sim.width;
             const sy = canvas.height / Sim.height;
+            // Optional: draw food density heatmap
+            if (toggleFood.checked) {
+                // Downsample drawing for performance
+                const targetCells = 150; // approx cells across
+                const step = Math.max(1, Math.floor(Math.max(Sim.width, Sim.height) / targetCells));
+                const drawW = Math.max(1, Math.floor(sx * step));
+                const drawH = Math.max(1, Math.floor(sy * step));
+                // Determine a normalization cap (plants up to 10, food up to ~15)
+                const cap = 20;
+                for (let y = 0; y < Sim.height; y += step) {
+                    for (let x = 0; x < Sim.width; x += step) {
+                        // Sample center of block
+                        const val = availableFoodAt(x, y);
+                        if (val <= 0) continue;
+                        const alpha = Math.min(0.5, (val / cap) * 0.5); // up to 0.5 alpha
+                        ctx.fillStyle = `rgba(56, 189, 248, ${alpha})`; // cyan-ish overlay
+                        ctx.fillRect(Math.floor(x * sx), Math.floor(y * sy), drawW, drawH);
+                    }
+                }
+            }
             // Draw creatures
             for (const c of Sim.creatures) {
                 const g = c.genome;
