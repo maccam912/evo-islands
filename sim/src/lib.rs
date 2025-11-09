@@ -21,6 +21,7 @@ pub fn run_spatial_simulation(
 
 /// Run a complete island simulation (DEPRECATED - use run_spatial_simulation instead)
 /// This is a compatibility wrapper that runs a minimal spatial simulation
+#[allow(clippy::manual_is_multiple_of)]
 pub fn run_simulation(
     seed_genomes: Vec<shared::Genome>,
     _generations: u32,
@@ -73,7 +74,7 @@ pub fn run_simulation(
         island.tick(&mut rng);
 
         // Sample fitness every 10 steps
-        if island.step.is_multiple_of(10) {
+        if island.step % 10 == 0 {
             let avg_gen_fitness = island.average_fitness();
             total_fitness += avg_gen_fitness;
             fitness_samples += 1;
