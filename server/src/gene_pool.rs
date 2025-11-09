@@ -223,7 +223,8 @@ impl GenePool {
         }
 
         // Ingest reported best genomes as new entries
-        // Give them a meaningful starting population so they can be selected and tested
+        // Start them at 150 (above initial 100) since they're proven performers from simulations
+        // This ensures they enter the top-5 selection pool immediately
         if !best_genomes.is_empty() {
             let min_fitness = best_genomes
                 .iter()
@@ -237,7 +238,7 @@ impl GenePool {
                 .unwrap_or(0.0);
 
             println!(
-                "Ingested {} evolved genomes with population=50 (fitness range: {:.3}-{:.3})",
+                "Ingested {} evolved genomes with population=150 (fitness range: {:.3}-{:.3})",
                 best_genomes.len(),
                 min_fitness,
                 max_fitness
@@ -250,7 +251,7 @@ impl GenePool {
                 id,
                 GenomeEntry {
                     genome: gwf.genome,
-                    population: 50, // Start with population boost to enable selection
+                    population: 150, // Start above initial (100) since these are proven performers
                 },
             );
         }
