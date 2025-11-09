@@ -63,11 +63,9 @@ impl GenePool {
     }
 
     /// Get seed genomes for a new spatial simulation
-    /// Returns 5 top population-weighted genomes + 5 random extinct genomes
+    /// Server injects mutation into seeds to prevent client-side tampering.
     pub async fn get_seed_genomes_spatial(&self) -> Vec<GenomeWithId> {
         let inner = self.inner.read().await;
-
-        let mut seeds = Vec::new();
 
         // Separate living and extinct genomes
         let mut living: Vec<_> = inner
@@ -75,62 +73,57 @@ impl GenePool {
             .values()
             .filter(|e| e.population > 0)
             .collect();
-
         let extinct: Vec<_> = inner
             .genomes
             .values()
             .filter(|e| e.population == 0)
             .collect();
 
-        // Sort living by population (weighted selection)
+        // Sort living by population
         living.sort_by(|a, b| b.population.cmp(&a.population));
 
-        // Take top 5 living genomes (or all if less than 5)
-        for entry in living.iter().take(5) {
-            seeds.push(GenomeWithId {
-                genome_id: entry.genome_id,
-                genome: entry.genome.clone(),
-            });
-        }
-
-        // Fill remaining with random extinct genomes
-        // Scope RNG so it is dropped before any subsequent await
+        // Build base selection: 5 living + 5 extinct
+        let mut base: Vec<Genome> = living.iter().take(5).map(|e| e.genome.clone()).collect();
         use rand::seq::SliceRandom;
-        let mut chosen_extinct: Vec<_> = {
+        let mut extinct_pick: Vec<Genome> = {
             let mut rng = rand::thread_rng();
             extinct
                 .choose_multiple(&mut rng, 5)
-                .map(|e| GenomeWithId {
-                    genome_id: e.genome_id,
-                    genome: e.genome.clone(),
-                })
+                .map(|e| e.genome.clone())
                 .collect()
         };
+        base.append(&mut extinct_pick);
+        drop(inner); // release read lock
 
-        seeds.append(&mut chosen_extinct);
-
-        // If we don't have 10 total, create new random genomes
-        drop(inner); // Release read lock before potentially modifying
-        while seeds.len() < 10 {
-            let genome_id = Uuid::new_v4();
-            let genome = Genome::random();
-
-            // Add to pool
-            let mut inner_write = self.inner.write().await;
-            inner_write.genomes.insert(
-                genome_id,
-                GenomeEntry {
-                    genome_id,
-                    genome: genome.clone(),
-                    population: 0, // Starts extinct
-                },
-            );
-            drop(inner_write);
-
-            seeds.push(GenomeWithId { genome_id, genome });
+        while base.len() < 10 {
+            base.push(Genome::random());
+        }
+        if base.len() > 10 {
+            base.truncate(10);
         }
 
-        seeds
+        // Mutate seeds server-side
+        const SERVER_MUT_RATE: f64 = 0.05;
+        let mut out: Vec<GenomeWithId> = Vec::with_capacity(10);
+        let mut new_entries: Vec<(Uuid, Genome)> = Vec::with_capacity(10);
+        for g in base.into_iter() {
+            let mut mg = g.clone();
+            mg.mutate(SERVER_MUT_RATE);
+            let id = Uuid::new_v4();
+            new_entries.push((id, mg.clone()));
+            out.push(GenomeWithId { genome_id: id, genome: mg });
+        }
+
+        // Insert mutated genomes into pool with population 0
+        let mut inner_write = self.inner.write().await;
+        for (genome_id, genome) in new_entries {
+            inner_write.genomes.insert(
+                genome_id,
+                GenomeEntry { genome_id, genome, population: 0 },
+            );
+        }
+
+        out
     }
 
     /// Get seed genomes (legacy method for backwards compatibility)
