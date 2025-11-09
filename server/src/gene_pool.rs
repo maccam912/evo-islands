@@ -7,7 +7,6 @@ use uuid::Uuid;
 /// Entry in the population-tracked gene pool
 #[derive(Debug, Clone)]
 struct GenomeEntry {
-    genome_id: Uuid,
     genome: Genome,
     population: u32, // Virtual population size
 }
@@ -44,9 +43,8 @@ impl GenePool {
             genomes.insert(
                 genome_id,
                 GenomeEntry {
-                    genome_id,
                     genome,
-                    population: 100, // Starting population
+                    population: 100,
                 },
             );
         }
@@ -111,7 +109,10 @@ impl GenePool {
             mg.mutate(SERVER_MUT_RATE);
             let id = Uuid::new_v4();
             new_entries.push((id, mg.clone()));
-            out.push(GenomeWithId { genome_id: id, genome: mg });
+            out.push(GenomeWithId {
+                genome_id: id,
+                genome: mg,
+            });
         }
 
         // Insert mutated genomes into pool with population 0
@@ -119,7 +120,10 @@ impl GenePool {
         for (genome_id, genome) in new_entries {
             inner_write.genomes.insert(
                 genome_id,
-                GenomeEntry { genome_id, genome, population: 0 },
+                GenomeEntry {
+                    genome,
+                    population: 0,
+                },
             );
         }
 
