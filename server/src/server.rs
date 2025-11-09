@@ -25,6 +25,8 @@ pub async fn run() -> anyhow::Result<()> {
         .route("/api/work/request", post(handle_work_request))
         .route("/api/work/submit", post(handle_work_submit))
         .route("/api/stats", get(handle_stats))
+        .route("/health", get(web::health))
+        .route("/healthz", get(web::health))
         .route("/", get(web::index))
         .layer(CorsLayer::permissive())
         .with_state(state);
