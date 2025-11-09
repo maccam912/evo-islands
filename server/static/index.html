@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvoIslands - Distributed Evolution</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 1.1em;
+            opacity: 0.8;
+        }
+
+        .creatures-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section-title {
+            font-size: 2em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .creatures-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .creature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .creature-rank {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .creature-viz {
+            width: 100%;
+            height: 150px;
+            margin: 15px 0;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .creature-svg {
+            width: 100px;
+            height: 100px;
+            transition: all 0.5s ease;
+        }
+
+        .gene-bars {
+            margin-top: 15px;
+        }
+
+        .gene-bar {
+            margin: 8px 0;
+        }
+
+        .gene-label {
+            font-size: 0.9em;
+            margin-bottom: 3px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .gene-progress {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .gene-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .fitness-score {
+            text-align: center;
+            font-size: 1.3em;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255, 215, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧬 EvoIslands</h1>
+        <p class="subtitle">Distributed Evolution Simulation</p>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Active Clients</div>
+                <div class="stat-value" id="active-clients">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Work Units Completed</div>
+                <div class="stat-value" id="work-units">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Generations</div>
+                <div class="stat-value" id="total-generations">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Gene Pool Size</div>
+                <div class="stat-value" id="gene-pool-size">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Server Uptime</div>
+                <div class="stat-value" id="uptime">--</div>
+            </div>
+        </div>
+
+        <div class="creatures-section">
+            <h2 class="section-title">🏆 Top Evolved Creatures</h2>
+            <div class="creatures-grid" id="creatures-grid">
+                <div class="loading">Loading creatures...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        function generateCreatureSVG(genome) {
+            const size = 50 + genome.size * 50;
+            const hue = genome.strength * 360;
+            const lightness = 50 + genome.efficiency * 20;
+
+            return `
+                <svg class="creature-svg" viewBox="0 0 100 100" style="width: ${size}px; height: ${size}px;">
+                    <!-- Body -->
+                    <ellipse cx="50" cy="60" rx="${20 + genome.size * 15}" ry="${15 + genome.size * 10}"
+                             fill="hsl(${hue}, 70%, ${lightness}%)" opacity="0.9"/>
+
+                    <!-- Head -->
+                    <circle cx="50" cy="35" r="${10 + genome.size * 5}"
+                            fill="hsl(${hue}, 70%, ${lightness - 10}%)"/>
+
+                    <!-- Eyes -->
+                    <circle cx="45" cy="33" r="2" fill="white"/>
+                    <circle cx="55" cy="33" r="2" fill="white"/>
+
+                    <!-- Speed indicators (legs) -->
+                    <line x1="40" y1="70" x2="${35 - genome.speed * 10}" y2="85"
+                          stroke="hsl(${hue}, 70%, ${lightness}%)" stroke-width="${2 + genome.speed * 2}"/>
+                    <line x1="60" y1="70" x2="${65 + genome.speed * 10}" y2="85"
+                          stroke="hsl(${hue}, 70%, ${lightness}%)" stroke-width="${2 + genome.speed * 2}"/>
+
+                    <!-- Strength indicator (arms) -->
+                    <line x1="35" y1="55" x2="${25 - genome.strength * 8}" y2="60"
+                          stroke="hsl(${hue}, 70%, ${lightness - 20}%)" stroke-width="${3 + genome.strength * 3}"/>
+                    <line x1="65" y1="55" x2="${75 + genome.strength * 8}" y2="60"
+                          stroke="hsl(${hue}, 70%, ${lightness - 20}%)" stroke-width="${3 + genome.strength * 3}"/>
+                </svg>
+            `;
+        }
+
+        function renderCreature(genome, fitness, rank) {
+            const genes = [
+                { name: 'Strength', value: genome.strength, icon: '💪' },
+                { name: 'Speed', value: genome.speed, icon: '⚡' },
+                { name: 'Size', value: genome.size, icon: '📏' },
+                { name: 'Efficiency', value: genome.efficiency, icon: '⚙️' },
+                { name: 'Reproduction', value: genome.reproduction, icon: '🧬' }
+            ];
+
+            const geneHTML = genes.map(gene => `
+                <div class="gene-bar">
+                    <div class="gene-label">
+                        <span>${gene.icon} ${gene.name}</span>
+                        <span>${(gene.value * 100).toFixed(0)}%</span>
+                    </div>
+                    <div class="gene-progress">
+                        <div class="gene-fill" style="width: ${gene.value * 100}%"></div>
+                    </div>
+                </div>
+            `).join('');
+
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+
+            return `
+                <div class="creature-card">
+                    <div class="creature-rank">${medal}</div>
+                    <div class="creature-viz">
+                        ${generateCreatureSVG(genome)}
+                    </div>
+                    <div class="gene-bars">
+                        ${geneHTML}
+                    </div>
+                    <div class="fitness-score">
+                        Fitness: ${fitness.toFixed(3)}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+
+                document.getElementById('active-clients').textContent = stats.active_clients;
+                document.getElementById('work-units').textContent = formatNumber(stats.total_work_units);
+                document.getElementById('total-generations').textContent = formatNumber(stats.total_generations);
+                document.getElementById('gene-pool-size').textContent = formatNumber(stats.gene_pool_size);
+                document.getElementById('uptime').textContent = formatUptime(stats.uptime_seconds);
+
+                const creaturesGrid = document.getElementById('creatures-grid');
+                if (stats.best_genomes && stats.best_genomes.length > 0) {
+                    creaturesGrid.innerHTML = stats.best_genomes
+                        .slice(0, 6)
+                        .map((g, i) => renderCreature(g.genome, g.fitness, i + 1))
+                        .join('');
+                }
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+            }
+        }
+
+        // Update stats every 2 seconds
+        updateStats();
+        setInterval(updateStats, 2000);
+    </script>
+</body>
+</html>

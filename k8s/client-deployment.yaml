@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evo-islands-client
+  labels:
+    app: evo-islands
+    component: client
+spec:
+  # Start with 3 clients, can scale up/down as needed
+  replicas: 3
+  selector:
+    matchLabels:
+      app: evo-islands
+      component: client
+  template:
+    metadata:
+      labels:
+        app: evo-islands
+        component: client
+    spec:
+      containers:
+      - name: client
+        image: ghcr.io/maccam912/evo-islands-client:latest
+        imagePullPolicy: Always
+        env:
+        - name: SERVER_URL
+          value: "https://evo-islands.rackspace.koski.co"
+        - name: RUST_LOG
+          value: "client=info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      restartPolicy: Always
