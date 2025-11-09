@@ -113,7 +113,6 @@ enum ApiError {
         server_version: u32,
         client_version: u32,
     },
-    InternalError(String),
 }
 
 impl IntoResponse for ApiError {
@@ -128,10 +127,6 @@ impl IntoResponse for ApiError {
                     server_version,
                     client_version,
                 },
-            ),
-            ApiError::InternalError(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ServerError::InternalError(msg),
             ),
         };
 

@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom;
 use shared::{Genome, GenomeWithFitness, GlobalStats};
 use std::sync::Arc;
 use tokio::sync::RwLock;
