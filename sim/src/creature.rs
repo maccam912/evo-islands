@@ -43,7 +43,8 @@ impl Creature {
 
     /// Consume energy based on genome
     pub fn consume_energy(&mut self) {
-        self.energy -= self.genome.energy_cost();
+        // DISABLED: Creatures no longer lose energy naturally (only from combat)
+        // self.energy -= self.genome.energy_cost();
         self.age += 1;
     }
 
@@ -198,7 +199,9 @@ mod tests {
 
         creature.consume_energy();
 
-        assert!(creature.energy < initial_energy);
+        // Energy consumption is disabled - energy should stay the same
+        assert_eq!(creature.energy, initial_energy);
+        // But age should still increment
         assert_eq!(creature.age, 1);
     }
 
