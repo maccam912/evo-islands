@@ -13,8 +13,5 @@ pub async fn index() -> Html<&'static str> {
 
 /// Health check endpoint for Kubernetes readiness/liveness probes
 pub async fn health() -> (StatusCode, Json<HealthResponse>) {
-    (
-        StatusCode::OK,
-        Json(HealthResponse { status: "healthy" }),
-    )
+    (StatusCode::OK, Json(HealthResponse { status: "healthy" }))
 }
