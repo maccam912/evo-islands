@@ -135,10 +135,11 @@ impl Island {
         }
 
         // 6. Remove dead creatures and update stats
+        // DISABLED: Age-based death is now disabled, creatures only die from combat
         let dead_creatures: Vec<_> = self
             .creatures
             .iter()
-            .filter(|c| c.is_dead() || c.age >= self.config.max_age)
+            .filter(|c| c.is_dead()) // Removed: || c.age >= self.config.max_age
             .cloned()
             .collect();
 
@@ -150,7 +151,7 @@ impl Island {
         }
 
         self.creatures
-            .retain(|c| !c.is_dead() && c.age < self.config.max_age);
+            .retain(|c| !c.is_dead()); // Removed: && c.age < self.config.max_age
 
         // 7. Reproduction phase
         self.reproduce(rng);
