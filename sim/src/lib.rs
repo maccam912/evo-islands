@@ -1,46 +1,71 @@
 pub mod creature;
 pub mod island;
+pub mod world;
 
 pub use creature::Creature;
-pub use island::{Island, IslandConfig};
+pub use island::{Island, IslandConfig, SurvivalStats};
+pub use world::World;
 
 use shared::{GenomeWithFitness, SimulationStats};
+use uuid::Uuid;
 
-/// Run a complete island simulation
+/// Run a spatial simulation with competitive evolution on a 2D grid
+/// Returns survival statistics for each genome
+pub fn run_spatial_simulation(
+    seed_genomes: Vec<(Uuid, shared::Genome)>,
+    config: IslandConfig,
+) -> Vec<SurvivalStats> {
+    let mut island = Island::new(config, seed_genomes);
+    island.run_simulation()
+}
+
+/// Run a complete island simulation (DEPRECATED - use run_spatial_simulation instead)
+/// This is a compatibility wrapper that runs a minimal spatial simulation
 pub fn run_simulation(
     seed_genomes: Vec<shared::Genome>,
-    generations: u32,
-    population_size: usize,
+    _generations: u32,
+    _population_size: usize,
     mutation_rate: f64,
 ) -> (Vec<GenomeWithFitness>, SimulationStats) {
+    // Convert to spatial simulation format
+    let seed_genomes_with_ids: Vec<(Uuid, shared::Genome)> = seed_genomes
+        .into_iter()
+        .map(|g| (Uuid::new_v4(), g))
+        .collect();
+
+    // Run a small spatial simulation
     let config = IslandConfig {
-        population_size,
+        world_width: 100,
+        world_height: 100,
+        max_steps: 500,
         mutation_rate,
-        food_per_tick: population_size as f64 * 0.8, // Slight scarcity
+        plant_density: 0.05,
+        food_density: 0.02,
         reproduction_threshold: 100.0,
         max_age: 500,
     };
 
-    let mut island = Island::new(config, seed_genomes);
+    let mut island = Island::new(config, seed_genomes_with_ids);
+    let mut rng = rand::thread_rng();
 
     let mut total_fitness = 0.0;
     let mut fitness_samples = 0;
     let mut best_fitness = 0.0;
-    let mut total_creatures = island.creatures.len();
+    let initial_count = island.creatures.len();
 
-    for _ in 0..generations {
-        island.tick();
+    while island.step < island.config.max_steps {
+        island.tick(&mut rng);
 
-        // Sample fitness
-        let avg_gen_fitness = island.average_fitness();
-        total_fitness += avg_gen_fitness;
-        fitness_samples += 1;
+        // Sample fitness every 10 steps
+        if island.step % 10 == 0 {
+            let avg_gen_fitness = island.average_fitness();
+            total_fitness += avg_gen_fitness;
+            fitness_samples += 1;
 
-        if avg_gen_fitness > best_fitness {
-            best_fitness = avg_gen_fitness;
+            if avg_gen_fitness > best_fitness {
+                best_fitness = avg_gen_fitness;
+            }
         }
-
-        total_creatures += island.creatures.len();
     }
 
     let avg_fitness = if fitness_samples > 0 {
@@ -54,7 +79,7 @@ pub fn run_simulation(
         avg_fitness,
         best_fitness,
         island.creatures.len(),
-        total_creatures,
+        initial_count + island.creatures.len(),
     );
 
     (best_genomes, stats)

@@ -1,101 +1,288 @@
-use crate::Creature;
+use crate::{Creature, World};
 use rand::seq::SliceRandom;
+use rand::Rng;
 use shared::{Genome, GenomeWithFitness};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct IslandConfig {
-    pub population_size: usize,
+    pub world_width: usize,
+    pub world_height: usize,
+    pub max_steps: u32,
     pub mutation_rate: f64,
-    pub food_per_tick: f64,
+    pub plant_density: f64,
+    pub food_density: f64,
     pub reproduction_threshold: f64,
     pub max_age: u32,
 }
 
+impl Default for IslandConfig {
+    fn default() -> Self {
+        Self {
+            world_width: 300,
+            world_height: 300,
+            max_steps: 3000,
+            mutation_rate: 0.05,
+            plant_density: 0.05,  // 5% of tiles are plants
+            food_density: 0.02,   // 2% of tiles are food
+            reproduction_threshold: 100.0,
+            max_age: 1000,
+        }
+    }
+}
+
+/// Results from a spatial simulation
+#[derive(Debug, Clone)]
+pub struct SurvivalStats {
+    pub genome_id: Uuid,
+    pub survived: u32,
+    pub total_spawned: u32,
+    pub avg_lifespan: f64,
+    pub total_food_eaten: u32,
+}
+
 pub struct Island {
     pub config: IslandConfig,
+    pub world: World,
     pub creatures: Vec<Creature>,
-    pub generation: u32,
+    pub step: u32,
+    genome_stats: HashMap<Uuid, GenomeLineage>,
+}
+
+#[derive(Debug, Clone)]
+struct GenomeLineage {
+    total_spawned: u32,
+    total_lifespan: u32,
+    total_food_eaten: u32,
 }
 
 impl Island {
-    /// Create a new island with seed genomes
-    pub fn new(config: IslandConfig, seed_genomes: Vec<Genome>) -> Self {
-        let mut creatures = Vec::new();
+    /// Create a new spatial island with seed genomes
+    pub fn new(config: IslandConfig, seed_genomes: Vec<(Uuid, Genome)>) -> Self {
+        let mut world = World::new(config.world_width, config.world_height);
+        let mut rng = rand::thread_rng();
 
-        // Create initial population from seed genomes
-        for _ in 0..config.population_size {
-            let genome = if seed_genomes.is_empty() {
-                Genome::random()
-            } else {
-                seed_genomes
-                    .choose(&mut rand::thread_rng())
-                    .unwrap()
-                    .clone()
-            };
-            creatures.push(Creature::new(genome));
+        // Initialize resources
+        world.initialize_resources(&mut rng, config.plant_density, config.food_density);
+
+        let mut creatures = Vec::new();
+        let mut genome_stats = HashMap::new();
+
+        // Create creatures from seed genomes
+        for (genome_id, genome) in seed_genomes {
+            // Random position
+            let x = rng.gen_range(0..config.world_width);
+            let y = rng.gen_range(0..config.world_height);
+
+            creatures.push(Creature::new(genome, genome_id, x, y));
+
+            // Initialize stats tracking
+            genome_stats.insert(
+                genome_id,
+                GenomeLineage {
+                    total_spawned: 1,
+                    total_lifespan: 0,
+                    total_food_eaten: 0,
+                },
+            );
         }
 
         Self {
             config,
+            world,
             creatures,
-            generation: 0,
+            step: 0,
+            genome_stats,
         }
     }
 
-    /// Advance the simulation by one tick
-    pub fn tick(&mut self) {
-        // 1. All creatures consume energy
+    /// Run the complete spatial simulation
+    pub fn run_simulation(&mut self) -> Vec<SurvivalStats> {
+        let mut rng = rand::thread_rng();
+
+        while self.step < self.config.max_steps && !self.should_stop() {
+            self.tick(&mut rng);
+        }
+
+        self.collect_survival_stats()
+    }
+
+    /// Check if simulation should stop (only one genome type left)
+    fn should_stop(&self) -> bool {
+        let unique_genomes: std::collections::HashSet<Uuid> =
+            self.creatures.iter().map(|c| c.genome_id).collect();
+        unique_genomes.len() <= 1
+    }
+
+    /// Advance the simulation by one step
+    pub fn tick<R: Rng>(&mut self, rng: &mut R) {
+        // 1. Regrow plants
+        self.world.tick_plants();
+
+        // 2. Creatures sense and decide actions
+        let actions = self.decide_actions(rng);
+
+        // 3. Execute movements
+        self.execute_movements(actions, rng);
+
+        // 4. Creatures try to eat
+        self.execute_eating(rng);
+
+        // 5. All creatures consume energy and age
         for creature in &mut self.creatures {
             creature.consume_energy();
         }
 
-        // 2. Distribute food based on combat power (competition)
-        self.distribute_food();
+        // 6. Remove dead creatures and update stats
+        let dead_creatures: Vec<_> = self
+            .creatures
+            .iter()
+            .filter(|c| c.is_dead() || c.age >= self.config.max_age)
+            .cloned()
+            .collect();
 
-        // 3. Remove dead creatures and old ones
+        for dead in dead_creatures {
+            if let Some(stats) = self.genome_stats.get_mut(&dead.genome_id) {
+                stats.total_lifespan += dead.age;
+                stats.total_food_eaten += dead.food_eaten;
+            }
+        }
+
         self.creatures
             .retain(|c| !c.is_dead() && c.age < self.config.max_age);
 
-        // 4. Reproduction phase
-        self.reproduce();
+        // 7. Reproduction phase
+        self.reproduce(rng);
 
-        // 5. Maintain population size (add random creatures if too few)
-        while self.creatures.len() < self.config.population_size / 4 {
-            self.creatures.push(Creature::new(Genome::random()));
-        }
-
-        self.generation += 1;
+        self.step += 1;
     }
 
-    /// Distribute food with competition
-    fn distribute_food(&mut self) {
-        if self.creatures.is_empty() {
-            return;
+    /// Creatures sense environment and decide what to do
+    fn decide_actions<R: Rng>(&self, rng: &mut R) -> Vec<(usize, Action)> {
+        let mut actions = Vec::new();
+
+        for (idx, creature) in self.creatures.iter().enumerate() {
+            // Find food within vision radius
+            let food_in_vision = self
+                .world
+                .find_food_in_radius(creature.x, creature.y, creature.vision_radius());
+
+            if let Some((food_x, food_y, _)) = food_in_vision.first() {
+                // Move towards nearest food
+                let direction = creature.direction_to(*food_x, *food_y);
+                actions.push((idx, Action::Move(direction)));
+            } else {
+                // Random movement
+                let directions = [
+                    crate::creature::Direction::North,
+                    crate::creature::Direction::South,
+                    crate::creature::Direction::East,
+                    crate::creature::Direction::West,
+                    crate::creature::Direction::NorthEast,
+                    crate::creature::Direction::NorthWest,
+                    crate::creature::Direction::SouthEast,
+                    crate::creature::Direction::SouthWest,
+                ];
+                let direction = directions.choose(rng).unwrap();
+                actions.push((idx, Action::Move(*direction)));
+            }
         }
 
-        // Calculate total combat power
-        let total_power: f64 = self.creatures.iter().map(|c| c.combat_power()).sum();
+        actions
+    }
 
-        if total_power <= 0.0 {
-            // Equal distribution if no one has power
-            let food_per_creature = self.config.food_per_tick / self.creatures.len() as f64;
-            for creature in &mut self.creatures {
-                creature.add_energy(food_per_creature);
+    /// Execute movement actions
+    fn execute_movements<R: Rng>(
+        &mut self,
+        actions: Vec<(usize, Action)>,
+        rng: &mut R,
+    ) {
+        for (idx, action) in actions {
+            if idx >= self.creatures.len() {
+                continue;
             }
-        } else {
-            // Distribute based on combat power (stronger creatures get more)
-            for creature in &mut self.creatures {
-                let power_ratio = creature.combat_power() / total_power;
-                let food = self.config.food_per_tick * power_ratio;
-                creature.add_energy(food);
+
+            let Action::Move(direction) = action;
+            let creature = &self.creatures[idx];
+            if let Some((new_x, new_y)) = creature.try_move(
+                direction,
+                self.config.world_width,
+                self.config.world_height,
+                rng,
+            ) {
+                self.creatures[idx].x = new_x;
+                self.creatures[idx].y = new_y;
             }
+        }
+    }
+
+    /// Creatures try to eat food at their positions
+    /// Implements hybrid combat: peaceful movement, but fight over food
+    fn execute_eating<R: Rng>(&mut self, rng: &mut R) {
+        // Group creatures by position
+        let mut positions: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+        for (idx, creature) in self.creatures.iter().enumerate() {
+            positions
+                .entry((creature.x, creature.y))
+                .or_insert_with(Vec::new)
+                .push(idx);
+        }
+
+        // Process each position with creatures
+        for ((x, y), creature_indices) in positions {
+            let available_food = self.world.get_available_food(x, y);
+
+            if available_food == 0 {
+                continue; // No food here
+            }
+
+            if creature_indices.len() == 1 {
+                // Single creature eats peacefully
+                let idx = creature_indices[0];
+                let food_eaten = self.world.consume_food(x, y, 10);
+                self.creatures[idx].add_energy(food_eaten as f64);
+                self.creatures[idx].food_eaten += food_eaten;
+            } else {
+                // Multiple creatures - COMBAT!
+                self.resolve_combat(&creature_indices, x, y, rng);
+            }
+        }
+    }
+
+    /// Resolve combat between creatures at the same food source
+    fn resolve_combat<R: Rng>(
+        &mut self,
+        creature_indices: &[usize],
+        x: usize,
+        y: usize,
+        _rng: &mut R,
+    ) {
+        // Calculate combat powers
+        let mut combatants: Vec<(usize, f64)> = creature_indices
+            .iter()
+            .map(|&idx| (idx, self.creatures[idx].combat_power()))
+            .collect();
+
+        // Sort by combat power (highest first)
+        combatants.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        // Winner gets the food
+        let (winner_idx, winner_power) = combatants[0];
+
+        let food_eaten = self.world.consume_food(x, y, 10);
+        self.creatures[winner_idx].add_energy(food_eaten as f64);
+        self.creatures[winner_idx].food_eaten += food_eaten;
+
+        // Losers take damage equal to winner's combat power
+        for (loser_idx, _) in combatants.iter().skip(1) {
+            self.creatures[*loser_idx].energy -= winner_power;
         }
     }
 
     /// Handle reproduction
-    fn reproduce(&mut self) {
+    fn reproduce<R: Rng>(&mut self, rng: &mut R) {
         let mut new_creatures = Vec::new();
-        let mut rng = rand::thread_rng();
 
         // Need at least 2 creatures to reproduce
         if self.creatures.len() < 2 {
@@ -104,7 +291,7 @@ impl Island {
 
         // Shuffle to randomize mating pairs
         let mut indices: Vec<usize> = (0..self.creatures.len()).collect();
-        indices.shuffle(&mut rng);
+        indices.shuffle(rng);
 
         // Try to pair up creatures for reproduction
         for i in (0..indices.len() - 1).step_by(2) {
@@ -126,6 +313,10 @@ impl Island {
 
                 // Create offspring
                 if let Some(child) = left.reproduce(right, self.config.mutation_rate) {
+                    // Track lineage
+                    if let Some(stats) = self.genome_stats.get_mut(&child.genome_id) {
+                        stats.total_spawned += 1;
+                    }
                     new_creatures.push(child);
                 }
             }
@@ -135,7 +326,38 @@ impl Island {
         self.creatures.extend(new_creatures);
     }
 
-    /// Get average fitness of the population
+    /// Collect survival statistics for all genomes
+    fn collect_survival_stats(&self) -> Vec<SurvivalStats> {
+        let mut results = Vec::new();
+
+        // Count current survivors by genome
+        let mut survivors: HashMap<Uuid, u32> = HashMap::new();
+        for creature in &self.creatures {
+            *survivors.entry(creature.genome_id).or_insert(0) += 1;
+        }
+
+        // Create stats for each genome we tracked
+        for (genome_id, lineage) in &self.genome_stats {
+            let survived = *survivors.get(genome_id).unwrap_or(&0);
+            let avg_lifespan = if lineage.total_spawned > 0 {
+                lineage.total_lifespan as f64 / lineage.total_spawned as f64
+            } else {
+                0.0
+            };
+
+            results.push(SurvivalStats {
+                genome_id: *genome_id,
+                survived,
+                total_spawned: lineage.total_spawned,
+                avg_lifespan,
+                total_food_eaten: lineage.total_food_eaten,
+            });
+        }
+
+        results
+    }
+
+    /// Get average fitness of the population (deprecated)
     pub fn average_fitness(&self) -> f64 {
         if self.creatures.is_empty() {
             return 0.0;
@@ -145,7 +367,7 @@ impl Island {
         total / self.creatures.len() as f64
     }
 
-    /// Get the best N genomes from the island
+    /// Get the best N genomes from the island (deprecated - use survival stats instead)
     pub fn get_best_genomes(&self, n: usize) -> Vec<GenomeWithFitness> {
         let mut creatures = self.creatures.clone();
         creatures.sort_by(|a, b| b.fitness().partial_cmp(&a.fitness()).unwrap());
@@ -161,83 +383,94 @@ impl Island {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Action {
+    Move(crate::creature::Direction),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_island_creation() {
-        let config = IslandConfig {
-            population_size: 50,
-            mutation_rate: 0.1,
-            food_per_tick: 40.0,
-            reproduction_threshold: 100.0,
-            max_age: 500,
-        };
-
-        let seeds = vec![Genome::random()];
+    fn test_spatial_island_creation() {
+        let config = IslandConfig::default();
+        let genome_id = Uuid::new_v4();
+        let seeds = vec![
+            (genome_id, Genome::random()),
+            (Uuid::new_v4(), Genome::random()),
+        ];
         let island = Island::new(config, seeds);
 
-        assert_eq!(island.creatures.len(), 50);
-        assert_eq!(island.generation, 0);
+        assert_eq!(island.creatures.len(), 2);
+        assert_eq!(island.step, 0);
+        assert_eq!(island.world.width, 300);
+        assert_eq!(island.world.height, 300);
     }
 
     #[test]
-    fn test_island_tick() {
+    fn test_spatial_island_tick() {
         let config = IslandConfig {
-            population_size: 20,
-            mutation_rate: 0.1,
-            food_per_tick: 20.0,
-            reproduction_threshold: 100.0,
-            max_age: 500,
+            max_steps: 10,
+            ..Default::default()
         };
 
-        let seeds = vec![Genome::random()];
+        let genome_id = Uuid::new_v4();
+        let seeds = vec![
+            (genome_id, Genome::random()),
+            (Uuid::new_v4(), Genome::random()),
+        ];
+        let mut island = Island::new(config, seeds);
+        let mut rng = rand::thread_rng();
+
+        island.tick(&mut rng);
+
+        assert_eq!(island.step, 1);
+    }
+
+    #[test]
+    fn test_simulation_runs() {
+        let config = IslandConfig {
+            world_width: 50,
+            world_height: 50,
+            max_steps: 100,
+            plant_density: 0.1,
+            food_density: 0.05,
+            ..Default::default()
+        };
+
+        let genome_id = Uuid::new_v4();
+        let seeds = vec![
+            (genome_id, Genome::random()),
+            (Uuid::new_v4(), Genome::random()),
+        ];
         let mut island = Island::new(config, seeds);
 
-        let initial_gen = island.generation;
-        island.tick();
+        let results = island.run_simulation();
 
-        assert_eq!(island.generation, initial_gen + 1);
+        assert!(!results.is_empty());
+        assert!(island.step <= 100);
     }
 
     #[test]
-    fn test_average_fitness() {
+    fn test_survival_stats_tracking() {
         let config = IslandConfig {
-            population_size: 10,
-            mutation_rate: 0.1,
-            food_per_tick: 10.0,
-            reproduction_threshold: 100.0,
-            max_age: 500,
+            world_width: 50,
+            world_height: 50,
+            max_steps: 50,
+            ..Default::default()
         };
 
-        let seeds = vec![Genome::default()];
-        let island = Island::new(config, seeds);
+        let genome_id = Uuid::new_v4();
+        let mut genome = Genome::default();
+        genome.efficiency = 1.0;  // High efficiency for survival
 
-        let fitness = island.average_fitness();
-        assert!(fitness > 0.0);
-    }
+        let seeds = vec![(genome_id, genome)];
+        let mut island = Island::new(config, seeds);
 
-    #[test]
-    fn test_get_best_genomes() {
-        let config = IslandConfig {
-            population_size: 20,
-            mutation_rate: 0.1,
-            food_per_tick: 20.0,
-            reproduction_threshold: 100.0,
-            max_age: 500,
-        };
+        let results = island.run_simulation();
 
-        let seeds = vec![Genome::random(), Genome::random()];
-        let island = Island::new(config, seeds);
-
-        let best = island.get_best_genomes(5);
-        assert!(best.len() <= 5);
-        assert!(!best.is_empty());
-
-        // Should be sorted by fitness
-        if best.len() > 1 {
-            assert!(best[0].fitness >= best[1].fitness);
-        }
+        assert_eq!(results.len(), 1);
+        assert!(results[0].total_spawned > 0);
     }
 }

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo add:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo tree:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.rs)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

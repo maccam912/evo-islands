@@ -166,6 +166,9 @@ impl Genome {
 
     /// Calculate fitness score (higher is better)
     /// This is a complex balance of all traits
+    ///
+    /// **Note**: In spatial simulations, true fitness is determined by survival,
+    /// not this abstract score. This is kept for backwards compatibility.
     pub fn fitness_score(&self) -> f64 {
         // Combat effectiveness
         let combat = self.strength + self.size * 0.5;

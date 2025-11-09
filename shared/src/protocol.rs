@@ -15,24 +15,54 @@ pub struct WorkRequest {
     pub client_version: String,
 }
 
+/// A genome paired with its lineage ID for tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenomeWithId {
+    pub genome_id: Uuid,
+    pub genome: Genome,
+}
+
 /// Server -> Client: Work assignment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkAssignment {
     /// Unique ID for this work unit
     pub work_id: Uuid,
 
-    /// Seed genomes to start the island with
-    /// These include the best known genomes plus some random historical ones
-    pub seed_genomes: Vec<Genome>,
+    /// Seed genomes to start the island with (with IDs for lineage tracking)
+    /// Version 2: includes genome IDs for survival tracking
+    pub seed_genomes_v2: Vec<GenomeWithId>,
 
-    /// How many generations to simulate
-    pub generations: u32,
+    /// Grid width for spatial simulation
+    pub grid_width: usize,
 
-    /// Population size for the island
-    pub population_size: usize,
+    /// Grid height for spatial simulation
+    pub grid_height: usize,
+
+    /// Maximum simulation steps
+    pub max_steps: u32,
 
     /// Mutation rate (0.0 to 1.0)
     pub mutation_rate: f64,
+
+    // Legacy fields for backwards compatibility (deprecated)
+    #[serde(default)]
+    pub seed_genomes: Vec<Genome>,
+
+    #[serde(default)]
+    pub generations: u32,
+
+    #[serde(default)]
+    pub population_size: usize,
+}
+
+/// Survival statistics for a genome lineage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SurvivalResult {
+    pub genome_id: Uuid,
+    pub survived: u32,
+    pub total_spawned: u32,
+    pub avg_lifespan: f64,
+    pub total_food_eaten: u32,
 }
 
 /// Client -> Server: Work result
@@ -44,14 +74,22 @@ pub struct WorkResult {
     /// Client ID
     pub client_id: Uuid,
 
-    /// Best genomes discovered during simulation
+    /// Survival results for each genome (Version 2)
+    #[serde(default)]
+    pub survival_results: Vec<SurvivalResult>,
+
+    /// Number of simulation steps completed
+    pub steps_completed: u32,
+
+    // Legacy fields for backwards compatibility (deprecated)
+    #[serde(default)]
     pub best_genomes: Vec<GenomeWithFitness>,
 
-    /// Number of generations actually simulated
+    #[serde(default)]
     pub generations_completed: u32,
 
-    /// Statistics from the simulation
-    pub stats: SimulationStats,
+    #[serde(default)]
+    pub stats: Option<SimulationStats>,
 }
 
 /// A genome paired with its fitness score
@@ -129,6 +167,29 @@ impl WorkRequest {
 }
 
 impl WorkAssignment {
+    /// Create a new spatial simulation work assignment (Version 2)
+    pub fn new_spatial(
+        seed_genomes_v2: Vec<GenomeWithId>,
+        grid_width: usize,
+        grid_height: usize,
+        max_steps: u32,
+        mutation_rate: f64,
+    ) -> Self {
+        Self {
+            work_id: Uuid::new_v4(),
+            seed_genomes_v2,
+            grid_width,
+            grid_height,
+            max_steps,
+            mutation_rate,
+            // Legacy fields
+            seed_genomes: vec![],
+            generations: 0,
+            population_size: 0,
+        }
+    }
+
+    /// Create a legacy work assignment (Version 1 - deprecated)
     pub fn new(
         seed_genomes: Vec<Genome>,
         generations: u32,
@@ -137,10 +198,14 @@ impl WorkAssignment {
     ) -> Self {
         Self {
             work_id: Uuid::new_v4(),
+            seed_genomes_v2: vec![],
+            grid_width: 0,
+            grid_height: 0,
+            max_steps: 0,
+            mutation_rate,
             seed_genomes,
             generations,
             population_size,
-            mutation_rate,
         }
     }
 }
