@@ -1,12 +1,12 @@
-use shared::Genome;
 use rand::Rng;
+use shared::Genome;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct Creature {
     pub id: Uuid,
     pub genome: Genome,
-    pub genome_id: Uuid,  // Original genome ID for lineage tracking
+    pub genome_id: Uuid, // Original genome ID for lineage tracking
     pub energy: f64,
     pub age: u32,
     pub x: usize,
@@ -84,7 +84,12 @@ impl Creature {
         let child_x = (self.x + other.x) / 2;
         let child_y = (self.y + other.y) / 2;
 
-        Some(Creature::new(child_genome, child_genome_id, child_x, child_y))
+        Some(Creature::new(
+            child_genome,
+            child_genome_id,
+            child_x,
+            child_y,
+        ))
     }
 
     /// Calculate fitness score
@@ -99,12 +104,12 @@ impl Creature {
 
     /// Get vision radius (affected by size)
     pub fn vision_radius(&self) -> f64 {
-        5.0 + self.genome.size * 10.0  // Base 5 + up to 10 more
+        5.0 + self.genome.size * 10.0 // Base 5 + up to 10 more
     }
 
     /// Calculate movement success probability based on speed
     pub fn movement_probability(&self) -> f64 {
-        0.3 + (self.genome.speed * 0.7)  // 30% to 100% chance
+        0.3 + (self.genome.speed * 0.7) // 30% to 100% chance
     }
 
     /// Attempt to move in a direction

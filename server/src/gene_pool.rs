@@ -9,7 +9,7 @@ use uuid::Uuid;
 struct GenomeEntry {
     genome_id: Uuid,
     genome: Genome,
-    population: u32,  // Virtual population size
+    population: u32, // Virtual population size
 }
 
 /// Manages the global gene pool with population tracking
@@ -46,7 +46,7 @@ impl GenePool {
                 GenomeEntry {
                     genome_id,
                     genome,
-                    population: 100,  // Starting population
+                    population: 100, // Starting population
                 },
             );
         }
@@ -110,7 +110,7 @@ impl GenePool {
         seeds.append(&mut chosen_extinct);
 
         // If we don't have 10 total, create new random genomes
-        drop(inner);  // Release read lock before potentially modifying
+        drop(inner); // Release read lock before potentially modifying
         while seeds.len() < 10 {
             let genome_id = Uuid::new_v4();
             let genome = Genome::random();
@@ -122,15 +122,12 @@ impl GenePool {
                 GenomeEntry {
                     genome_id,
                     genome: genome.clone(),
-                    population: 0,  // Starts extinct
+                    population: 0, // Starts extinct
                 },
             );
             drop(inner_write);
 
-            seeds.push(GenomeWithId {
-                genome_id,
-                genome,
-            });
+            seeds.push(GenomeWithId { genome_id, genome });
         }
 
         seeds
@@ -188,7 +185,10 @@ impl GenePool {
                 }
             } else {
                 // Unknown genome - this shouldn't happen but handle gracefully
-                eprintln!("Warning: Received results for unknown genome {}", result.genome_id);
+                eprintln!(
+                    "Warning: Received results for unknown genome {}",
+                    result.genome_id
+                );
             }
         }
 
@@ -229,7 +229,7 @@ impl GenePool {
             .take(10)
             .map(|e| GenomeWithFitness {
                 genome: e.genome.clone(),
-                fitness: e.genome.fitness_score(),  // For display purposes
+                fitness: e.genome.fitness_score(), // For display purposes
             })
             .collect();
 

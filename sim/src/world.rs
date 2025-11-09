@@ -11,7 +11,9 @@ pub enum Tile {
         regrowth_timer: u32,
     },
     /// Consumable resource: doesn't regrow
-    Food { amount: u32 },
+    Food {
+        amount: u32,
+    },
 }
 
 /// 2D grid world for spatial simulation
@@ -174,7 +176,12 @@ impl World {
     }
 
     /// Find all food positions within a radius of a point
-    pub fn find_food_in_radius(&self, center_x: usize, center_y: usize, radius: f64) -> Vec<(usize, usize, u32)> {
+    pub fn find_food_in_radius(
+        &self,
+        center_x: usize,
+        center_y: usize,
+        radius: f64,
+    ) -> Vec<(usize, usize, u32)> {
         let mut food_positions = Vec::new();
         let radius_squared = radius * radius;
 
@@ -221,8 +228,8 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
     #[test]
     fn test_world_creation() {

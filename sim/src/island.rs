@@ -24,8 +24,8 @@ impl Default for IslandConfig {
             world_height: 300,
             max_steps: 3000,
             mutation_rate: 0.05,
-            plant_density: 0.05,  // 5% of tiles are plants
-            food_density: 0.02,   // 2% of tiles are food
+            plant_density: 0.05, // 5% of tiles are plants
+            food_density: 0.02,  // 2% of tiles are food
             reproduction_threshold: 100.0,
             max_age: 1000,
         }
@@ -164,9 +164,9 @@ impl Island {
 
         for (idx, creature) in self.creatures.iter().enumerate() {
             // Find food within vision radius
-            let food_in_vision = self
-                .world
-                .find_food_in_radius(creature.x, creature.y, creature.vision_radius());
+            let food_in_vision =
+                self.world
+                    .find_food_in_radius(creature.x, creature.y, creature.vision_radius());
 
             if let Some((food_x, food_y, _)) = food_in_vision.first() {
                 // Move towards nearest food
@@ -193,11 +193,7 @@ impl Island {
     }
 
     /// Execute movement actions
-    fn execute_movements<R: Rng>(
-        &mut self,
-        actions: Vec<(usize, Action)>,
-        rng: &mut R,
-    ) {
+    fn execute_movements<R: Rng>(&mut self, actions: Vec<(usize, Action)>, rng: &mut R) {
         for (idx, action) in actions {
             if idx >= self.creatures.len() {
                 continue;
@@ -463,7 +459,7 @@ mod tests {
 
         let genome_id = Uuid::new_v4();
         let mut genome = Genome::default();
-        genome.efficiency = 1.0;  // High efficiency for survival
+        genome.efficiency = 1.0; // High efficiency for survival
 
         let seeds = vec![(genome_id, genome)];
         let mut island = Island::new(config, seeds);
