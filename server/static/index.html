@@ -207,6 +207,41 @@
                 <div class="loading">Loading creatures...</div>
             </div>
         </div>
+
+        <div class="creatures-section" id="live-sim-section">
+            <h2 class="section-title">🎥 Live Simulation (Local Preview)</h2>
+            <div style="display:flex; gap:20px; flex-wrap: wrap; align-items: flex-start;">
+                <div style="flex: 1 1 520px; max-width: 820px;">
+                    <canvas id="sim-canvas" width="600" height="600" style="width:600px;height:600px;background:rgba(0,0,0,0.25);border-radius:8px;border:1px solid rgba(255,255,255,0.15);"></canvas>
+                </div>
+                <div style="flex: 1 1 320px; min-width: 300px;">
+                    <div class="stat-card" style="text-align:left;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+                            <button id="btn-start" style="padding:8px 14px;border-radius:6px;border:none;background:#6ee7b7;color:#0b3d2a;font-weight:600;cursor:pointer;">Start Simulation</button>
+                            <button id="btn-play" disabled style="padding:8px 14px;border-radius:6px;border:none;background:#60a5fa;color:#0b1a3d;font-weight:600;cursor:pointer;">Play</button>
+                            <button id="btn-step" disabled style="padding:8px 14px;border-radius:6px;border:none;background:#fbbf24;color:#3a2a00;font-weight:600;cursor:pointer;">Step</button>
+                            <button id="btn-reset" disabled style="padding:8px 14px;border-radius:6px;border:none;background:#f87171;color:#3d0b0b;font-weight:600;cursor:pointer;">Reset</button>
+                        </div>
+                        <div style="margin:10px 0 6px 0; opacity:0.9;">Speed</div>
+                        <input id="speed-range" type="range" min="1" max="10" step="1" value="1" style="width:100%;">
+                        <div style="display:flex; justify-content:space-between; font-size:0.9em; opacity:0.85;"><span>1x</span><span>10x</span></div>
+                        <div style="margin-top:16px;">
+                            <div class="gene-bar">
+                                <div class="gene-label"><span>Step</span><span id="sim-step-label">0 / 0</span></div>
+                                <div class="gene-progress"><div id="sim-step-progress" class="gene-fill" style="width:0%"></div></div>
+                            </div>
+                            <div class="gene-bar" style="margin-top:10px;">
+                                <div class="gene-label"><span>Creatures Alive</span><span id="sim-creatures-label">-</span></div>
+                                <div class="gene-progress"><div id="sim-creatures-progress" class="gene-fill" style="width:0%"></div></div>
+                            </div>
+                        </div>
+                        <div style="margin-top:16px; font-size:0.95em; opacity:0.9;">
+                            Click Start to fetch 10 seed genomes and run a local 2D simulation for up to 3000 steps. Use Play/Pause or Step to advance and visualize in the browser. This does not submit results.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -322,6 +357,415 @@
         // Update stats every 2 seconds
         updateStats();
         setInterval(updateStats, 2000);
+
+        // -------------------
+        // Local Live Simulation
+        // -------------------
+        const canvas = document.getElementById('sim-canvas');
+        const ctx = canvas.getContext('2d');
+
+        const btnStart = document.getElementById('btn-start');
+        const btnPlay = document.getElementById('btn-play');
+        const btnStep = document.getElementById('btn-step');
+        const btnReset = document.getElementById('btn-reset');
+        const speedRange = document.getElementById('speed-range');
+        const stepLabel = document.getElementById('sim-step-label');
+        const stepProgress = document.getElementById('sim-step-progress');
+        const creaturesLabel = document.getElementById('sim-creatures-label');
+        const creaturesProgress = document.getElementById('sim-creatures-progress');
+
+        // Helper: UUID v4
+        function uuidv4() {
+            // Simple RFC4122-ish generator
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = (Math.random() * 16) | 0;
+                const v = c === 'x' ? r : (r & 0x3) | 0x8;
+                return v.toString(16);
+            });
+        }
+
+        // Genome helpers (mirror Rust logic roughly)
+        const TRAIT_BUDGET = 2.5;
+        function clamp01(x) { return Math.min(1, Math.max(0, x)); }
+        function normalizeGenome(g) {
+            // Clamp
+            g.strength = clamp01(g.strength);
+            g.speed = clamp01(g.speed);
+            g.size = clamp01(g.size);
+            g.efficiency = clamp01(g.efficiency);
+            g.reproduction = clamp01(g.reproduction);
+            const sum = g.strength + g.speed + g.size + g.efficiency + g.reproduction;
+            if (sum > 0) {
+                const scale = TRAIT_BUDGET / sum;
+                g.strength = Math.min(1, g.strength * scale);
+                g.speed = Math.min(1, g.speed * scale);
+                g.size = Math.min(1, g.size * scale);
+                g.efficiency = Math.min(1, g.efficiency * scale);
+                g.reproduction = Math.min(1, g.reproduction * scale);
+            } else {
+                const even = TRAIT_BUDGET / 5.0;
+                g.strength = g.speed = g.size = g.efficiency = g.reproduction = even;
+            }
+            return g;
+        }
+        function energyCost(g) {
+            const base = 1.0;
+            const traitCost = g.strength * 2.0 + g.speed * 1.5 + g.size * 1.8 + g.reproduction * 0.5;
+            const mult = 2.0 - g.efficiency;
+            return base + traitCost * mult;
+        }
+        function combatPower(g) { return g.strength + g.size * 0.5; }
+        function movementProbability(g) { return 0.3 + g.speed * 0.7; }
+        function mutateGenome(g, rate) {
+            const nudge = () => (Math.random() * 0.2 - 0.1);
+            let m = { ...g };
+            if (Math.random() < rate) m.strength += nudge();
+            if (Math.random() < rate) m.speed += nudge();
+            if (Math.random() < rate) m.size += nudge();
+            if (Math.random() < rate) m.efficiency += nudge();
+            if (Math.random() < rate) m.reproduction += nudge();
+            return normalizeGenome(m);
+        }
+        function crossover(a, b) {
+            return normalizeGenome({
+                strength: Math.random() < 0.5 ? a.strength : b.strength,
+                speed: Math.random() < 0.5 ? a.speed : b.speed,
+                size: Math.random() < 0.5 ? a.size : b.size,
+                efficiency: Math.random() < 0.5 ? a.efficiency : b.efficiency,
+                reproduction: Math.random() < 0.5 ? a.reproduction : b.reproduction,
+            });
+        }
+
+        // World & simulation state
+        const Sim = {
+            active: false,
+            playing: false,
+            width: 0, height: 0, step: 0, maxSteps: 0,
+            mutationRate: 0.05,
+            reproductionThreshold: 100.0,
+            maxAge: 1000,
+            plantDensity: 0.05,
+            foodDensity: 0.02,
+            plants: null, // array of {food, max, timer} or null for empty; linearized index y*width+x
+            food: null,   // array of non-regrowing food amounts or 0
+            creatures: [], // {id, genomeId, genome, energy, age, x, y, foodEaten}
+        };
+
+        function worldIndex(x, y) { return y * Sim.width + x; }
+        function inBounds(x, y) { return x >= 0 && y >= 0 && x < Sim.width && y < Sim.height; }
+
+        function initWorld() {
+            const N = Sim.width * Sim.height;
+            Sim.plants = new Array(N).fill(null);
+            Sim.food = new Array(N).fill(0);
+
+            const numPlants = Math.floor(N * Sim.plantDensity);
+            const numFood = Math.floor(N * Sim.foodDensity);
+
+            for (let i = 0; i < numPlants; i++) {
+                const x = Math.floor(Math.random() * Sim.width);
+                const y = Math.floor(Math.random() * Sim.height);
+                const idx = worldIndex(x, y);
+                if (!Sim.plants[idx]) {
+                    Sim.plants[idx] = { food: 10, max: 10, timer: 0 };
+                }
+            }
+            for (let i = 0; i < numFood; i++) {
+                const x = Math.floor(Math.random() * Sim.width);
+                const y = Math.floor(Math.random() * Sim.height);
+                const idx = worldIndex(x, y);
+                if (!Sim.plants[idx] && Sim.food[idx] === 0) {
+                    Sim.food[idx] = 5 + Math.floor(Math.random() * 11); // 5..15
+                }
+            }
+        }
+
+        function tickPlants() {
+            for (let idx = 0; idx < Sim.plants.length; idx++) {
+                const p = Sim.plants[idx];
+                if (!p) continue;
+                if (p.food < p.max) {
+                    if (p.timer > 0) {
+                        p.timer -= 1;
+                        if (p.timer === 0) {
+                            p.food += 1;
+                            if (p.food < p.max) p.timer = 10;
+                        }
+                    } else {
+                        p.food += 1;
+                        if (p.food < p.max) p.timer = 10;
+                    }
+                }
+            }
+        }
+
+        function availableFoodAt(x, y) {
+            const idx = worldIndex(x, y);
+            let total = 0;
+            const p = Sim.plants[idx];
+            if (p) total += p.food;
+            total += Sim.food[idx] || 0;
+            return total;
+        }
+        function consumeFoodAt(x, y, amount) {
+            const idx = worldIndex(x, y);
+            let taken = 0;
+            // Plants first
+            const p = Sim.plants[idx];
+            if (p && p.food > 0) {
+                const t = Math.min(p.food, amount - taken);
+                p.food -= t;
+                taken += t;
+                if (p.food === 0) p.timer = 10;
+            }
+            // Then non-regrowing food
+            if (taken < amount && Sim.food[idx] > 0) {
+                const t = Math.min(Sim.food[idx], amount - taken);
+                Sim.food[idx] -= t;
+                taken += t;
+                if (Sim.food[idx] === 0) Sim.food[idx] = 0;
+            }
+            return taken;
+        }
+
+        function decideAndMove(creature) {
+            // Consume energy + age
+            creature.energy -= energyCost(creature.genome);
+            creature.age += 1;
+            if (creature.energy <= 0) return; // dead soon
+
+            // Sense nearest food in radius
+            const radius = 5.0 + creature.genome.size * 10.0;
+            const r = Math.ceil(radius);
+            let best = null;
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    const nx = creature.x + dx;
+                    const ny = creature.y + dy;
+                    if (!inBounds(nx, ny)) continue;
+                    const dist2 = dx * dx + dy * dy;
+                    if (dist2 > radius * radius) continue;
+                    const food = availableFoodAt(nx, ny);
+                    if (food > 0) {
+                        const dist = Math.sqrt(dist2);
+                        if (!best || dist < best.dist) {
+                            best = { x: nx, y: ny, dist };
+                        }
+                    }
+                }
+            }
+            // Try to move one step towards target
+            if (best && Math.random() < movementProbability(creature.genome)) {
+                const dx = Math.sign(best.x - creature.x);
+                const dy = Math.sign(best.y - creature.y);
+                const nx = creature.x + dx;
+                const ny = creature.y + dy;
+                if (inBounds(nx, ny)) { creature.x = nx; creature.y = ny; }
+            }
+        }
+
+        function eatPhase() {
+            // Group indices by position
+            const map = new Map(); // key "x,y" -> list of indices
+            for (let i = 0; i < Sim.creatures.length; i++) {
+                const c = Sim.creatures[i];
+                if (c.energy <= 0) continue;
+                const key = `${c.x},${c.y}`;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(i);
+            }
+            for (const [key, idxs] of map.entries()) {
+                const [x, y] = key.split(',').map(n => parseInt(n));
+                const avail = availableFoodAt(x, y);
+                if (avail === 0) continue;
+                if (idxs.length === 1) {
+                    const i = idxs[0];
+                    const eaten = consumeFoodAt(x, y, 10);
+                    Sim.creatures[i].energy += eaten;
+                    Sim.creatures[i].foodEaten = (Sim.creatures[i].foodEaten || 0) + eaten;
+                } else {
+                    // Combat: strongest wins food, others take damage
+                    const powers = idxs.map(i => ({ i, p: combatPower(Sim.creatures[i].genome) }));
+                    powers.sort((a, b) => b.p - a.p);
+                    const winner = powers[0];
+                    const eaten = consumeFoodAt(x, y, 10);
+                    Sim.creatures[winner.i].energy += eaten;
+                    Sim.creatures[winner.i].foodEaten = (Sim.creatures[winner.i].foodEaten || 0) + eaten;
+                    for (let k = 1; k < powers.length; k++) {
+                        Sim.creatures[powers[k].i].energy -= winner.p;
+                    }
+                }
+            }
+        }
+
+        function reproducePhase() {
+            if (Sim.creatures.length < 2) return;
+            // Random shuffle of indices
+            const idxs = [...Array(Sim.creatures.length).keys()];
+            for (let i = idxs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+            }
+            const newOnes = [];
+            for (let i = 0; i + 1 < idxs.length; i += 2) {
+                const a = Sim.creatures[idxs[i]];
+                const b = Sim.creatures[idxs[i + 1]];
+                if (a.energy >= Sim.reproductionThreshold && b.energy >= Sim.reproductionThreshold) {
+                    a.energy -= 50.0; b.energy -= 50.0;
+                    const childGenome = mutateGenome(crossover(a.genome, b.genome), Sim.mutationRate);
+                    const child = {
+                        id: uuidv4(),
+                        genomeId: a.genomeId, // inherit lineage id from parent A
+                        genome: childGenome,
+                        energy: 50.0,
+                        age: 0,
+                        x: Math.floor((a.x + b.x) / 2),
+                        y: Math.floor((a.y + b.y) / 2),
+                        foodEaten: 0,
+                    };
+                    newOnes.push(child);
+                }
+            }
+            Sim.creatures.push(...newOnes);
+        }
+
+        function cleanupPhase() {
+            Sim.creatures = Sim.creatures.filter(c => c.energy > 0 && c.age < Sim.maxAge);
+        }
+
+        function oneTick() {
+            if (!Sim.active) return;
+            if (Sim.step >= Sim.maxSteps) return;
+            tickPlants();
+            for (const c of Sim.creatures) decideAndMove(c);
+            eatPhase();
+            reproducePhase();
+            cleanupPhase();
+            Sim.step += 1;
+            renderSim();
+        }
+
+        function renderSim() {
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Scale world to canvas
+            const sx = canvas.width / Sim.width;
+            const sy = canvas.height / Sim.height;
+            // Draw creatures
+            for (const c of Sim.creatures) {
+                const g = c.genome;
+                const hue = g.strength * 360;
+                const light = 50 + g.efficiency * 20;
+                const r = 2 + g.size * 3; // small dot
+                ctx.fillStyle = `hsl(${hue},70%,${light}%)`;
+                ctx.beginPath();
+                ctx.arc((c.x + 0.5) * sx, (c.y + 0.5) * sy, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // HUD
+            stepLabel.textContent = `${Sim.step} / ${Sim.maxSteps}`;
+            stepProgress.style.width = `${(Sim.step / Sim.maxSteps) * 100}%`;
+            creaturesLabel.textContent = `${Sim.creatures.length}`;
+            const creaturesPct = Math.min(100, (Sim.creatures.length / 500) * 100);
+            creaturesProgress.style.width = `${creaturesPct}%`;
+        }
+
+        let playHandle = null;
+        function setPlaying(p) {
+            Sim.playing = p;
+            btnPlay.textContent = p ? 'Pause' : 'Play';
+            if (playHandle) { clearInterval(playHandle); playHandle = null; }
+            if (p) {
+                const speed = parseInt(speedRange.value, 10); // ticks per frame batch
+                playHandle = setInterval(() => {
+                    for (let i = 0; i < speed; i++) {
+                        if (Sim.step >= Sim.maxSteps) { setPlaying(false); break; }
+                        oneTick();
+                    }
+                }, 50);
+            }
+        }
+
+        async function startSimulation() {
+            try {
+                btnStart.disabled = true;
+                btnStart.textContent = 'Loading...';
+                // Request assignment like a client
+                const req = {
+                    client_id: uuidv4(),
+                    protocol_version: 2,
+                    client_version: 'web-preview',
+                };
+                const resp = await fetch('/api/work/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+                const assignment = await resp.json();
+
+                // Initialize sim
+                Sim.width = assignment.grid_width || 300;
+                Sim.height = assignment.grid_height || 300;
+                Sim.maxSteps = assignment.max_steps || 3000;
+                Sim.mutationRate = assignment.mutation_rate ?? 0.05;
+                Sim.step = 0;
+                Sim.creatures = [];
+                initWorld();
+
+                (assignment.seed_genomes_v2 || []).forEach((gwi) => {
+                    const g = normalizeGenome({ ...gwi.genome });
+                    Sim.creatures.push({
+                        id: uuidv4(),
+                        genomeId: gwi.genome_id,
+                        genome: g,
+                        energy: 50.0,
+                        age: 0,
+                        x: Math.floor(Math.random() * Sim.width),
+                        y: Math.floor(Math.random() * Sim.height),
+                        foodEaten: 0,
+                    });
+                });
+
+                // Enable controls
+                btnPlay.disabled = false;
+                btnStep.disabled = false;
+                btnReset.disabled = false;
+                btnStart.textContent = 'Restart';
+                Sim.active = true;
+                renderSim();
+            } catch (e) {
+                console.error('Failed to start simulation', e);
+                btnStart.disabled = false;
+                btnStart.textContent = 'Start Simulation';
+            }
+        }
+
+        function resetSimulation() {
+            setPlaying(false);
+            Sim.active = false;
+            Sim.creatures = [];
+            Sim.step = 0;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stepLabel.textContent = '0 / 0';
+            stepProgress.style.width = '0%';
+            creaturesLabel.textContent = '-';
+            creaturesProgress.style.width = '0%';
+            btnPlay.disabled = true;
+            btnStep.disabled = true;
+            btnReset.disabled = true;
+            btnStart.disabled = false;
+            btnStart.textContent = 'Start Simulation';
+        }
+
+        btnStart.addEventListener('click', async () => {
+            if (Sim.active) {
+                resetSimulation();
+                // immediate restart
+                setTimeout(startSimulation, 10);
+            } else {
+                await startSimulation();
+            }
+        });
+        btnPlay.addEventListener('click', () => setPlaying(!Sim.playing));
+        btnStep.addEventListener('click', oneTick);
+        btnReset.addEventListener('click', resetSimulation);
+        speedRange.addEventListener('input', () => { if (Sim.playing) setPlaying(true); });
     </script>
 </body>
 </html>
