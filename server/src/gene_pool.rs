@@ -189,7 +189,12 @@ impl GenePool {
                 if result.survived > 0 {
                     // Survivors: boost population
                     entry.population = entry.population.saturating_add(result.survived * 10);
-                    population_changes.push((result.genome_id, old_pop, entry.population, result.survived));
+                    population_changes.push((
+                        result.genome_id,
+                        old_pop,
+                        entry.population,
+                        result.survived,
+                    ));
                 } else {
                     // Extinct: reduce population
                     entry.population = entry.population.saturating_sub(20);
@@ -207,16 +212,29 @@ impl GenePool {
         if !population_changes.is_empty() {
             println!("Population updates:");
             for (id, old_pop, new_pop, survived) in population_changes {
-                println!("  {} {} → {} (survived: {})",
-                    &id.to_string()[..8], old_pop, new_pop, survived);
+                println!(
+                    "  {} {} → {} (survived: {})",
+                    &id.to_string()[..8],
+                    old_pop,
+                    new_pop,
+                    survived
+                );
             }
         }
 
         // Ingest reported best genomes as new entries
         // Give them a meaningful starting population so they can be selected and tested
         if !best_genomes.is_empty() {
-            let min_fitness = best_genomes.iter().map(|g| g.fitness).min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-            let max_fitness = best_genomes.iter().map(|g| g.fitness).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+            let min_fitness = best_genomes
+                .iter()
+                .map(|g| g.fitness)
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+            let max_fitness = best_genomes
+                .iter()
+                .map(|g| g.fitness)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
 
             println!(
                 "Ingested {} evolved genomes with population=50 (fitness range: {:.3}-{:.3})",
