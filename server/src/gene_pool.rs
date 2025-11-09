@@ -80,6 +80,15 @@ impl GenePool {
         // Sort living by population
         living.sort_by(|a, b| b.population.cmp(&a.population));
 
+        println!(
+            "Gene pool: {} living (pop range: {}-{}), {} extinct, {} total",
+            living.len(),
+            living.last().map(|e| e.population).unwrap_or(0),
+            living.first().map(|e| e.population).unwrap_or(0),
+            extinct.len(),
+            inner.genomes.len()
+        );
+
         // Build base selection: 5 living + 5 extinct
         let mut base: Vec<Genome> = living.iter().take(5).map(|e| e.genome.clone()).collect();
         use rand::seq::SliceRandom;
@@ -173,14 +182,23 @@ impl GenePool {
         inner.active_clients.insert(client_id);
 
         // Update populations based on survival
+        let mut population_changes = Vec::new();
         for result in survival_results {
             if let Some(entry) = inner.genomes.get_mut(&result.genome_id) {
+                let old_pop = entry.population;
                 if result.survived > 0 {
                     // Survivors: boost population
                     entry.population = entry.population.saturating_add(result.survived * 10);
+                    population_changes.push((
+                        result.genome_id,
+                        old_pop,
+                        entry.population,
+                        result.survived,
+                    ));
                 } else {
                     // Extinct: reduce population
                     entry.population = entry.population.saturating_sub(20);
+                    population_changes.push((result.genome_id, old_pop, entry.population, 0));
                 }
             } else {
                 // Unknown genome - this shouldn't happen but handle gracefully
@@ -191,14 +209,49 @@ impl GenePool {
             }
         }
 
-        // Ingest reported best genomes as new entries (population starts at 0)
+        if !population_changes.is_empty() {
+            println!("Population updates:");
+            for (id, old_pop, new_pop, survived) in population_changes {
+                println!(
+                    "  {} {} → {} (survived: {})",
+                    &id.to_string()[..8],
+                    old_pop,
+                    new_pop,
+                    survived
+                );
+            }
+        }
+
+        // Ingest reported best genomes as new entries
+        // Start them at 150 (above initial 100) since they're proven performers from simulations
+        // This ensures they enter the top-5 selection pool immediately
+        if !best_genomes.is_empty() {
+            let min_fitness = best_genomes
+                .iter()
+                .map(|g| g.fitness)
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+            let max_fitness = best_genomes
+                .iter()
+                .map(|g| g.fitness)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+
+            println!(
+                "Ingested {} evolved genomes with population=150 (fitness range: {:.3}-{:.3})",
+                best_genomes.len(),
+                min_fitness,
+                max_fitness
+            );
+        }
+
         for gwf in best_genomes {
             let id = Uuid::new_v4();
             inner.genomes.insert(
                 id,
                 GenomeEntry {
                     genome: gwf.genome,
-                    population: 0,
+                    population: 150, // Start above initial (100) since these are proven performers
                 },
             );
         }
