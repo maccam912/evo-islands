@@ -150,8 +150,7 @@ impl Island {
             }
         }
 
-        self.creatures
-            .retain(|c| !c.is_dead()); // Removed: && c.age < self.config.max_age
+        self.creatures.retain(|c| !c.is_dead()); // Removed: && c.age < self.config.max_age
 
         // 7. Reproduction phase
         self.reproduce(rng);
