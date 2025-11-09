@@ -199,9 +199,16 @@ mod tests {
     fn test_genome_creation() {
         let genome = Genome::new(0.8, 0.6, 0.7, 0.5, 0.4);
         // After normalization, traits should sum close to TRAIT_BUDGET (or less if clamped)
-        let sum = genome.strength + genome.speed + genome.size + genome.efficiency + genome.reproduction;
-        assert!(sum <= TRAIT_BUDGET + 0.001, "Traits sum should not exceed TRAIT_BUDGET");
-        assert!(sum >= TRAIT_BUDGET * 0.8, "Traits sum should be reasonably close to TRAIT_BUDGET");
+        let sum =
+            genome.strength + genome.speed + genome.size + genome.efficiency + genome.reproduction;
+        assert!(
+            sum <= TRAIT_BUDGET + 0.001,
+            "Traits sum should not exceed TRAIT_BUDGET"
+        );
+        assert!(
+            sum >= TRAIT_BUDGET * 0.8,
+            "Traits sum should be reasonably close to TRAIT_BUDGET"
+        );
         // Traits should maintain their relative proportions
         assert!(genome.strength > genome.speed);
         assert!(genome.size > genome.efficiency);
@@ -213,9 +220,16 @@ mod tests {
         // Values should be clamped and normalized
         assert!(genome.strength >= 0.0 && genome.strength <= 1.0);
         assert!(genome.speed >= 0.0 && genome.speed <= 1.0);
-        let sum = genome.strength + genome.speed + genome.size + genome.efficiency + genome.reproduction;
-        assert!(sum <= TRAIT_BUDGET + 0.001, "Traits sum should not exceed TRAIT_BUDGET");
-        assert!(sum >= TRAIT_BUDGET * 0.8, "Traits sum should be reasonably close to TRAIT_BUDGET");
+        let sum =
+            genome.strength + genome.speed + genome.size + genome.efficiency + genome.reproduction;
+        assert!(
+            sum <= TRAIT_BUDGET + 0.001,
+            "Traits sum should not exceed TRAIT_BUDGET"
+        );
+        assert!(
+            sum >= TRAIT_BUDGET * 0.8,
+            "Traits sum should be reasonably close to TRAIT_BUDGET"
+        );
     }
 
     #[test]
@@ -241,7 +255,10 @@ mod tests {
         assert!(child.reproduction >= 0.0 && child.reproduction <= 1.0);
         // Child should maintain trait budget constraint (with lower threshold for extreme parents)
         let sum = child.strength + child.speed + child.size + child.efficiency + child.reproduction;
-        assert!(sum <= TRAIT_BUDGET + 0.001, "Child traits sum should not exceed TRAIT_BUDGET");
+        assert!(
+            sum <= TRAIT_BUDGET + 0.001,
+            "Child traits sum should not exceed TRAIT_BUDGET"
+        );
         assert!(sum > 0.0, "Child should have some trait values");
     }
 
@@ -259,9 +276,19 @@ mod tests {
             assert!(genome.reproduction >= 0.0 && genome.reproduction <= 1.0);
 
             // Verify trait budget is maintained after mutation
-            let sum = genome.strength + genome.speed + genome.size + genome.efficiency + genome.reproduction;
-            assert!(sum <= TRAIT_BUDGET + 0.001, "Trait sum should not exceed TRAIT_BUDGET after mutation");
-            assert!(sum >= TRAIT_BUDGET * 0.5, "Trait sum should be reasonably close to TRAIT_BUDGET after mutation");
+            let sum = genome.strength
+                + genome.speed
+                + genome.size
+                + genome.efficiency
+                + genome.reproduction;
+            assert!(
+                sum <= TRAIT_BUDGET + 0.001,
+                "Trait sum should not exceed TRAIT_BUDGET after mutation"
+            );
+            assert!(
+                sum >= TRAIT_BUDGET * 0.5,
+                "Trait sum should be reasonably close to TRAIT_BUDGET after mutation"
+            );
         }
     }
 }
