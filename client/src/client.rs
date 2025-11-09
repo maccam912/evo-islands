@@ -132,8 +132,10 @@ impl Client {
                 .map(|g| (g.genome_id, g.genome))
                 .collect();
 
-            // Run spatial simulation
-            let survival_stats = sim::run_spatial_simulation(seed_genomes, config);
+            // Run spatial simulation with Island to also capture best genomes
+            let mut island = sim::Island::new(config, seed_genomes);
+            let survival_stats = island.run_simulation();
+            let best_genomes = island.get_best_genomes(10);
 
             // Convert SurvivalStats to SurvivalResult
             let survival_results = survival_stats
@@ -153,7 +155,7 @@ impl Client {
                 survival_results,
                 steps_completed: assignment.max_steps,
                 // Legacy fields
-                best_genomes: vec![],
+                best_genomes,
                 generations_completed: 0,
                 stats: None,
             })

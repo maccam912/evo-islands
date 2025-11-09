@@ -154,6 +154,10 @@ pub struct GlobalStats {
 
     /// Server uptime in seconds
     pub uptime_seconds: u64,
+
+    /// Total unique genomes ever recorded in the pool
+    #[serde(default)]
+    pub unique_genomes: usize,
 }
 
 impl WorkRequest {

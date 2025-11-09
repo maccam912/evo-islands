@@ -196,6 +196,10 @@
                 <div class="stat-value" id="gene-pool-size">--</div>
             </div>
             <div class="stat-card">
+                <div class="stat-label">Unique Genomes</div>
+                <div class="stat-value" id="unique-genomes">--</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-label">Server Uptime</div>
                 <div class="stat-value" id="uptime">--</div>
             </div>
@@ -349,6 +353,9 @@
                 document.getElementById('work-units').textContent = formatNumber(stats.total_work_units);
                 document.getElementById('total-generations').textContent = formatNumber(stats.total_generations);
                 document.getElementById('gene-pool-size').textContent = formatNumber(stats.gene_pool_size);
+                if (typeof stats.unique_genomes === 'number') {
+                    document.getElementById('unique-genomes').textContent = formatNumber(stats.unique_genomes);
+                }
                 document.getElementById('uptime').textContent = formatUptime(stats.uptime_seconds);
 
                 const creaturesGrid = document.getElementById('creatures-grid');

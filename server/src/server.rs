@@ -51,13 +51,13 @@ async fn handle_work_request(
     let seed_genomes_v2 = state.gene_pool.get_seed_genomes_spatial().await;
 
     // Create work assignment for spatial simulation
-    // Clients do NOT mutate; server injects mutations into seeds. Set mutation_rate = 0.0
+    // Both server and clients mutate to encourage exploration
     let assignment = WorkAssignment::new_spatial(
         seed_genomes_v2,
         300,  // grid width
         300,  // grid height
         3000, // max steps
-        0.0,  // client-side mutation disabled
+        0.05, // client-side mutation enabled
     );
 
     Json(assignment)
@@ -83,6 +83,7 @@ async fn handle_work_submit(
                 result.client_id,
                 result.survival_results,
                 result.steps_completed,
+                result.best_genomes,
             )
             .await;
     } else {

@@ -164,6 +164,7 @@ impl GenePool {
         client_id: Uuid,
         survival_results: Vec<SurvivalResult>,
         steps_completed: u32,
+        best_genomes: Vec<GenomeWithFitness>,
     ) {
         let mut inner = self.inner.write().await;
 
@@ -188,6 +189,18 @@ impl GenePool {
                     result.genome_id
                 );
             }
+        }
+
+        // Ingest reported best genomes as new entries (population starts at 0)
+        for gwf in best_genomes {
+            let id = Uuid::new_v4();
+            inner.genomes.insert(
+                id,
+                GenomeEntry {
+                    genome: gwf.genome,
+                    population: 0,
+                },
+            );
         }
 
         // Limit max population to prevent overflow
@@ -238,6 +251,7 @@ impl GenePool {
             best_genomes,
             gene_pool_size: inner.genomes.len(),
             uptime_seconds: inner.start_time.elapsed().as_secs(),
+            unique_genomes: inner.genomes.len(),
         }
     }
 
@@ -286,7 +300,8 @@ mod tests {
             total_food_eaten: 500,
         }];
 
-        pool.submit_survival_results(client_id, results, 3000).await;
+        pool.submit_survival_results(client_id, results, 3000, Vec::new())
+            .await;
 
         let stats = pool.get_stats().await;
         assert_eq!(stats.total_work_units, 1);
@@ -316,7 +331,8 @@ mod tests {
             total_food_eaten: 300,
         }];
 
-        pool.submit_survival_results(client_id, results, 3000).await;
+        pool.submit_survival_results(client_id, results, 3000, Vec::new())
+            .await;
 
         // Check population increased
         let new_pop = {
@@ -344,7 +360,8 @@ mod tests {
             total_food_eaten: 0,
         }];
 
-        pool.submit_survival_results(client_id, results, 3000).await;
+        pool.submit_survival_results(client_id, results, 3000, Vec::new())
+            .await;
 
         // Check population decreased
         let new_pop = {
