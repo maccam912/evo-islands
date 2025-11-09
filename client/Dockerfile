@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
 COPY Cargo.toml ./
 COPY shared ./shared
 COPY sim ./sim
+COPY server ./server
 COPY client ./client
 
 # Build the client
