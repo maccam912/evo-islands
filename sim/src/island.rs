@@ -221,7 +221,7 @@ impl Island {
         for (idx, creature) in self.creatures.iter().enumerate() {
             positions
                 .entry((creature.x, creature.y))
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(idx);
         }
 
@@ -458,8 +458,10 @@ mod tests {
         };
 
         let genome_id = Uuid::new_v4();
-        let mut genome = Genome::default();
-        genome.efficiency = 1.0; // High efficiency for survival
+        let genome = Genome {
+            efficiency: 1.0,
+            ..Default::default()
+        }; // High efficiency for survival
 
         let seeds = vec![(genome_id, genome)];
         let mut island = Island::new(config, seeds);

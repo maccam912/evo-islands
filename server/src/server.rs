@@ -1,14 +1,12 @@
 use crate::gene_pool::GenePool;
 use crate::web;
 use axum::{
-    body::Body,
     extract::State,
-    http::{Response, StatusCode},
-    response::IntoResponse,
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
-use shared::{GlobalStats, ServerError, WorkAssignment, WorkRequest, WorkResult, PROTOCOL_VERSION};
+use shared::{GlobalStats, WorkAssignment, WorkRequest, WorkResult};
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 
@@ -45,8 +43,10 @@ pub async fn run() -> anyhow::Result<()> {
 #[axum::debug_handler]
 async fn handle_work_request(
     State(state): State<AppState>,
-    Json(_request): Json<WorkRequest>,
+    Json(request): Json<WorkRequest>,
 ) -> Json<WorkAssignment> {
+    // Register client as active for stats
+    state.gene_pool.register_client(request.client_id).await;
     // Get seed genomes for spatial simulation (Version 2)
     let seed_genomes_v2 = state.gene_pool.get_seed_genomes_spatial().await;
 
@@ -111,40 +111,11 @@ async fn handle_stats(State(state): State<AppState>) -> Json<GlobalStats> {
     Json(stats)
 }
 
-/// API error type
-#[derive(Debug)]
-pub enum ApiError {
-    VersionMismatch {
-        server_version: u32,
-        client_version: u32,
-    },
-}
-
-pub type Result<T> = std::result::Result<T, ApiError>;
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response<Body> {
-        let (status, error) = match self {
-            ApiError::VersionMismatch {
-                server_version,
-                client_version,
-            } => (
-                StatusCode::BAD_REQUEST,
-                ServerError::VersionMismatch {
-                    server_version,
-                    client_version,
-                },
-            ),
-        };
-
-        (status, Json(error)).into_response()
-    }
-}
+// Legacy error types are no longer used; handler returns only success paths.
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
 
     // Tests disabled due to Axum Handler trait compilation issue
     // The handlers work fine at runtime but don't compile in test context

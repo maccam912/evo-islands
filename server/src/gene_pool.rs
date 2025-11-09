@@ -134,6 +134,7 @@ impl GenePool {
     }
 
     /// Get seed genomes (legacy method for backwards compatibility)
+    #[allow(dead_code)]
     pub async fn get_seed_genomes(&self, count: usize) -> Vec<Genome> {
         let inner = self.inner.read().await;
 
@@ -303,7 +304,7 @@ mod tests {
         let genome_id = seeds[0].genome_id;
 
         // Initial population
-        let initial_stats = pool.get_stats().await;
+        let _initial_stats = pool.get_stats().await;
         let initial_pop = {
             let inner = pool.inner.read().await;
             inner.genomes.get(&genome_id).unwrap().population

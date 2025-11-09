@@ -246,15 +246,19 @@ mod tests {
 
     #[test]
     fn test_movement_probability() {
-        let mut genome = Genome::default();
-        genome.speed = 1.0;
+        let genome = Genome {
+            speed: 1.0,
+            ..Default::default()
+        };
         let genome_id = Uuid::new_v4();
         let creature = Creature::new(genome, genome_id, 10, 10);
 
         assert_eq!(creature.movement_probability(), 1.0);
 
-        let mut genome2 = Genome::default();
-        genome2.speed = 0.0;
+        let genome2 = Genome {
+            speed: 0.0,
+            ..Default::default()
+        };
         let creature2 = Creature::new(genome2, Uuid::new_v4(), 10, 10);
 
         assert_eq!(creature2.movement_probability(), 0.3);

@@ -73,7 +73,7 @@ pub fn run_simulation(
         island.tick(&mut rng);
 
         // Sample fitness every 10 steps
-        if island.step % 10 == 0 {
+        if island.step.is_multiple_of(10) {
             let avg_gen_fitness = island.average_fitness();
             total_fitness += avg_gen_fitness;
             fitness_samples += 1;
