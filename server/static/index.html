@@ -734,7 +734,8 @@
         }
 
         function cleanupPhase() {
-            Sim.creatures = Sim.creatures.filter(c => c.energy > 0 && c.age < Sim.maxAge);
+            // Age-based death is now disabled, creatures only die from combat (energy depletion)
+            Sim.creatures = Sim.creatures.filter(c => c.energy > 0);
         }
 
         function oneTick() {
