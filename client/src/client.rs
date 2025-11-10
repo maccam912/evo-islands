@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use shared::{ServerError, WorkRequest, WorkResult, PROTOCOL_VERSION};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 pub struct Client {
@@ -191,9 +191,20 @@ impl Client {
 pub async fn run(server_url: &str) -> Result<()> {
     let client = Client::new(server_url);
 
+    // Set 1-hour timeout for container lifecycle
+    let start_time = Instant::now();
+    let timeout = Duration::from_secs(60 * 60); // 1 hour
+
     tracing::info!("Client ID: {}", client.client_id);
+    tracing::info!("Client will run for 1 hour before exiting for restart");
 
     loop {
+        // Check if we've exceeded the 1-hour timeout
+        if start_time.elapsed() >= timeout {
+            tracing::info!("1-hour timeout reached - exiting to allow container restart");
+            break;
+        }
+
         // Request work
         let assignment = match client.request_work().await {
             Ok(a) => a,
@@ -227,6 +238,8 @@ pub async fn run(server_url: &str) -> Result<()> {
 
         tracing::info!("Work completed successfully");
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
