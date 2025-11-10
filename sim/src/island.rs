@@ -341,11 +341,11 @@ impl Island {
         let mut lowest_health = f64::MAX;
 
         for (idx, creature) in self.creatures.iter().enumerate() {
-            if creature.energy <= 0.0 {
-                if weakest_idx.is_none() || creature.health < lowest_health {
-                    weakest_idx = Some(idx);
-                    lowest_health = creature.health;
-                }
+            if creature.energy <= 0.0
+                && (weakest_idx.is_none() || creature.health < lowest_health)
+            {
+                weakest_idx = Some(idx);
+                lowest_health = creature.health;
             }
         }
 
