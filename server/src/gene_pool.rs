@@ -349,7 +349,6 @@ mod tests {
             genome_id,
             survived: 5,
             total_spawned: 10,
-            avg_lifespan: 100.0,
             total_food_eaten: 500,
         }];
 
@@ -380,7 +379,6 @@ mod tests {
             genome_id,
             survived: 3,
             total_spawned: 5,
-            avg_lifespan: 200.0,
             total_food_eaten: 300,
         }];
 
@@ -409,7 +407,6 @@ mod tests {
             genome_id,
             survived: 0,
             total_spawned: 1,
-            avg_lifespan: 10.0,
             total_food_eaten: 0,
         }];
 

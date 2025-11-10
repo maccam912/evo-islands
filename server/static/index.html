@@ -519,7 +519,10 @@
             return base + traitCost * mult;
         }
         function combatPower(g) { return g.strength + g.size * 0.5; }
-        function movementProbability(g) { return 0.3 + g.speed * 0.7; }
+        function movementProbability(g, energy) {
+            const base = 0.3 + g.speed * 0.7;
+            return energy <= 0 ? base * 0.1 : base; // 1/10th probability when out of energy
+        }
         function mutateGenome(g, rate) {
             const nudge = () => (Math.random() * 0.2 - 0.1);
             let m = { ...g };
@@ -546,13 +549,12 @@
             playing: false,
             width: 0, height: 0, step: 0, maxSteps: 0,
             mutationRate: 0.05,
-            reproductionThreshold: 100.0,
-            maxAge: 1000,
+            reproductionThreshold: 60.0,
             plantDensity: 0.05,
             foodDensity: 0.02,
             plants: null, // array of {food, max, timer} or null for empty; linearized index y*width+x
             food: null,   // array of non-regrowing food amounts or 0
-            creatures: [], // {id, genomeId, genome, energy, age, x, y, foodEaten}
+            creatures: [], // {id, genomeId, genome, energy, health, x, y, foodEaten}
         };
 
         function worldIndex(x, y) { return y * Sim.width + x; }
@@ -633,10 +635,8 @@
         }
 
         function decideAndMove(creature) {
-            // Consume energy + age
-            creature.energy -= energyCost(creature.genome);
-            creature.age += 1;
-            if (creature.energy <= 0) return; // dead soon
+            // Energy no longer consumed naturally - only affects movement probability
+            if (creature.health <= 0) return; // dead
 
             // Sense nearest food in radius
             const radius = 5.0 + creature.genome.size * 10.0;
@@ -658,8 +658,8 @@
                     }
                 }
             }
-            // Try to move one step towards target
-            if (best && Math.random() < movementProbability(creature.genome)) {
+            // Try to move one step towards target (energy affects movement probability)
+            if (best && Math.random() < movementProbability(creature.genome, creature.energy)) {
                 const dx = Math.sign(best.x - creature.x);
                 const dy = Math.sign(best.y - creature.y);
                 const nx = creature.x + dx;
@@ -673,7 +673,7 @@
             const map = new Map(); // key "x,y" -> list of indices
             for (let i = 0; i < Sim.creatures.length; i++) {
                 const c = Sim.creatures[i];
-                if (c.energy <= 0) continue;
+                if (c.health <= 0) continue; // Skip dead creatures
                 const key = `${c.x},${c.y}`;
                 if (!map.has(key)) map.set(key, []);
                 map.get(key).push(i);
@@ -688,15 +688,16 @@
                     Sim.creatures[i].energy += eaten;
                     Sim.creatures[i].foodEaten = (Sim.creatures[i].foodEaten || 0) + eaten;
                 } else {
-                    // Combat: strongest wins food, others take damage
+                    // Combat: strongest wins food, losers take damage to health
                     const powers = idxs.map(i => ({ i, p: combatPower(Sim.creatures[i].genome) }));
                     powers.sort((a, b) => b.p - a.p);
                     const winner = powers[0];
                     const eaten = consumeFoodAt(x, y, 10);
                     Sim.creatures[winner.i].energy += eaten;
                     Sim.creatures[winner.i].foodEaten = (Sim.creatures[winner.i].foodEaten || 0) + eaten;
+                    // Losers take damage to health (25% of winner's combat power)
                     for (let k = 1; k < powers.length; k++) {
-                        Sim.creatures[powers[k].i].energy -= winner.p;
+                        Sim.creatures[powers[k].i].health -= winner.p * 0.25;
                     }
                 }
             }
@@ -704,6 +705,10 @@
 
         function reproducePhase() {
             if (Sim.creatures.length < 2) return;
+
+            // Population limit: half of world area
+            const populationLimit = (Sim.width * Sim.height) / 2;
+
             // Random shuffle of indices
             const idxs = [...Array(Sim.creatures.length).keys()];
             for (let i = idxs.length - 1; i > 0; i--) {
@@ -715,14 +720,39 @@
                 const a = Sim.creatures[idxs[i]];
                 const b = Sim.creatures[idxs[i + 1]];
                 if (a.energy >= Sim.reproductionThreshold && b.energy >= Sim.reproductionThreshold) {
-                    a.energy -= 50.0; b.energy -= 50.0;
+                    // Check if at population limit
+                    if (Sim.creatures.length + newOnes.length >= populationLimit) {
+                        // Find creature with lowest health and zero energy to remove
+                        let removeIdx = -1;
+                        let lowestHealth = Infinity;
+                        for (let k = 0; k < Sim.creatures.length; k++) {
+                            if (Sim.creatures[k].energy <= 0) {
+                                if (removeIdx === -1 || Sim.creatures[k].health < lowestHealth) {
+                                    removeIdx = k;
+                                    lowestHealth = Sim.creatures[k].health;
+                                }
+                            }
+                        }
+                        if (removeIdx >= 0) {
+                            // Remove the weakest creature
+                            Sim.creatures.splice(removeIdx, 1);
+                            // Adjust indices if needed
+                            if (removeIdx <= idxs[i]) idxs[i]--;
+                            if (removeIdx <= idxs[i + 1]) idxs[i + 1]--;
+                        } else {
+                            // No creature with zero energy found, block spawning
+                            continue;
+                        }
+                    }
+
+                    a.energy -= 20.0; b.energy -= 20.0;
                     const childGenome = mutateGenome(crossover(a.genome, b.genome), Sim.mutationRate);
                     const child = {
                         id: uuidv4(),
                         genomeId: a.genomeId, // inherit lineage id from parent A
                         genome: childGenome,
-                        energy: 50.0,
-                        age: 0,
+                        energy: 100.0,
+                        health: 100.0,
                         x: Math.floor((a.x + b.x) / 2),
                         y: Math.floor((a.y + b.y) / 2),
                         foodEaten: 0,
@@ -734,8 +764,8 @@
         }
 
         function cleanupPhase() {
-            // Age-based death is now disabled, creatures only die from combat (energy depletion)
-            Sim.creatures = Sim.creatures.filter(c => c.energy > 0);
+            // Creatures die when health reaches zero
+            Sim.creatures = Sim.creatures.filter(c => c.health > 0);
         }
 
         function oneTick() {
@@ -839,8 +869,8 @@
                         id: uuidv4(),
                         genomeId: gwi.genome_id,
                         genome: g,
-                        energy: 50.0,
-                        age: 0,
+                        energy: 100.0,
+                        health: 100.0,
                         x: Math.floor(Math.random() * Sim.width),
                         y: Math.floor(Math.random() * Sim.height),
                         foodEaten: 0,
