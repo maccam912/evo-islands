@@ -124,7 +124,7 @@ impl Island {
         // 4. Creatures try to eat
         self.execute_eating(rng);
 
-        // 5. All creatures consume energy and age
+        // 5. Consume energy (currently disabled - energy only affects movement)
         for creature in &mut self.creatures {
             creature.consume_energy();
         }
