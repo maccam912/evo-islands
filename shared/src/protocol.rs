@@ -61,7 +61,6 @@ pub struct SurvivalResult {
     pub genome_id: Uuid,
     pub survived: u32,
     pub total_spawned: u32,
-    pub avg_lifespan: f64,
     pub total_food_eaten: u32,
 }
 

@@ -58,7 +58,6 @@ pub fn run_simulation(
         plant_density: 0.10,
         food_density: 0.05,
         reproduction_threshold: 100.0,
-        max_age: 600,
     };
 
     let mut island = Island::new(config, seed_genomes_with_ids);

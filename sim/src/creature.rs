@@ -8,7 +8,7 @@ pub struct Creature {
     pub genome: Genome,
     pub genome_id: Uuid, // Original genome ID for lineage tracking
     pub energy: f64,
-    pub age: u32,
+    pub health: f64,
     pub x: usize,
     pub y: usize,
     pub food_eaten: u32,
@@ -33,8 +33,8 @@ impl Creature {
             id: Uuid::new_v4(),
             genome,
             genome_id,
-            energy: 100.0, // Starting energy - increased from 50.0 for better survival
-            age: 0,
+            energy: 100.0, // Starting energy
+            health: 100.0, // Starting health
             x,
             y,
             food_eaten: 0,
@@ -43,9 +43,8 @@ impl Creature {
 
     /// Consume energy based on genome
     pub fn consume_energy(&mut self) {
-        // DISABLED: Creatures no longer lose energy naturally (only from combat)
-        // self.energy -= self.genome.energy_cost();
-        self.age += 1;
+        // DISABLED: Creatures no longer lose energy naturally
+        // Energy only affects movement probability
     }
 
     /// Add energy (from food)
@@ -55,7 +54,12 @@ impl Creature {
 
     /// Check if creature is dead
     pub fn is_dead(&self) -> bool {
-        self.energy <= 0.0
+        self.health <= 0.0
+    }
+
+    /// Take damage (reduces health)
+    pub fn take_damage(&mut self, amount: f64) {
+        self.health -= amount;
     }
 
     /// Check if creature can reproduce
@@ -108,9 +112,16 @@ impl Creature {
         5.0 + self.genome.size * 10.0 // Base 5 + up to 10 more
     }
 
-    /// Calculate movement success probability based on speed
+    /// Calculate movement success probability based on speed and energy
+    /// Zero energy = 1/10th of normal probability
+    /// 1 or more energy = normal probability
     pub fn movement_probability(&self) -> f64 {
-        0.3 + (self.genome.speed * 0.7) // 30% to 100% chance
+        let base_probability = 0.3 + (self.genome.speed * 0.7); // 30% to 100% chance
+        if self.energy <= 0.0 {
+            base_probability * 0.1 // 1/10th probability when out of energy
+        } else {
+            base_probability
+        }
     }
 
     /// Attempt to move in a direction
@@ -185,7 +196,7 @@ mod tests {
         let genome_id = Uuid::new_v4();
         let creature = Creature::new(genome, genome_id, 10, 10);
         assert_eq!(creature.energy, 100.0);
-        assert_eq!(creature.age, 0);
+        assert_eq!(creature.health, 100.0);
         assert_eq!(creature.x, 10);
         assert_eq!(creature.y, 10);
     }
@@ -201,8 +212,6 @@ mod tests {
 
         // Energy consumption is disabled - energy should stay the same
         assert_eq!(creature.energy, initial_energy);
-        // But age should still increment
-        assert_eq!(creature.age, 1);
     }
 
     #[test]
@@ -210,7 +219,7 @@ mod tests {
         let genome = Genome::default();
         let genome_id = Uuid::new_v4();
         let mut creature = Creature::new(genome, genome_id, 10, 10);
-        creature.energy = 0.0;
+        creature.health = 0.0;
 
         assert!(creature.is_dead());
     }
@@ -256,15 +265,21 @@ mod tests {
         let genome_id = Uuid::new_v4();
         let creature = Creature::new(genome, genome_id, 10, 10);
 
+        // With normal energy (100.0), should be full probability
         assert_eq!(creature.movement_probability(), 1.0);
 
         let genome2 = Genome {
             speed: 0.0,
             ..Default::default()
         };
-        let creature2 = Creature::new(genome2, Uuid::new_v4(), 10, 10);
+        let mut creature2 = Creature::new(genome2, Uuid::new_v4(), 10, 10);
 
+        // With normal energy, should be base 0.3
         assert_eq!(creature2.movement_probability(), 0.3);
+
+        // With zero energy, should be 1/10th
+        creature2.energy = 0.0;
+        assert_eq!(creature2.movement_probability(), 0.03);
     }
 
     #[test]

@@ -122,7 +122,6 @@ impl Client {
                 plant_density: 0.05,
                 food_density: 0.02,
                 reproduction_threshold: 100.0,
-                max_age: 1000,
             };
 
             // Convert GenomeWithId to (Uuid, Genome) tuples
@@ -144,7 +143,6 @@ impl Client {
                     genome_id: s.genome_id,
                     survived: s.survived,
                     total_spawned: s.total_spawned,
-                    avg_lifespan: s.avg_lifespan,
                     total_food_eaten: s.total_food_eaten,
                 })
                 .collect();

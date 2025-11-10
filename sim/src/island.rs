@@ -14,7 +14,6 @@ pub struct IslandConfig {
     pub plant_density: f64,
     pub food_density: f64,
     pub reproduction_threshold: f64,
-    pub max_age: u32,
 }
 
 impl Default for IslandConfig {
@@ -27,7 +26,6 @@ impl Default for IslandConfig {
             plant_density: 0.08, // Increased from 5% to 8% for more food availability
             food_density: 0.04,  // Increased from 2% to 4% for more food availability
             reproduction_threshold: 60.0, // Reduced from 100.0 to match creature.rs changes
-            max_age: 1000,
         }
     }
 }
@@ -38,7 +36,6 @@ pub struct SurvivalStats {
     pub genome_id: Uuid,
     pub survived: u32,
     pub total_spawned: u32,
-    pub avg_lifespan: f64,
     pub total_food_eaten: u32,
 }
 
@@ -53,7 +50,6 @@ pub struct Island {
 #[derive(Debug, Clone)]
 struct GenomeLineage {
     total_spawned: u32,
-    total_lifespan: u32,
     total_food_eaten: u32,
 }
 
@@ -82,7 +78,6 @@ impl Island {
                 genome_id,
                 GenomeLineage {
                     total_spawned: 1,
-                    total_lifespan: 0,
                     total_food_eaten: 0,
                 },
             );
@@ -135,22 +130,20 @@ impl Island {
         }
 
         // 6. Remove dead creatures and update stats
-        // DISABLED: Age-based death is now disabled, creatures only die from combat
         let dead_creatures: Vec<_> = self
             .creatures
             .iter()
-            .filter(|c| c.is_dead()) // Removed: || c.age >= self.config.max_age
+            .filter(|c| c.is_dead())
             .cloned()
             .collect();
 
         for dead in dead_creatures {
             if let Some(stats) = self.genome_stats.get_mut(&dead.genome_id) {
-                stats.total_lifespan += dead.age;
                 stats.total_food_eaten += dead.food_eaten;
             }
         }
 
-        self.creatures.retain(|c| !c.is_dead()); // Removed: && c.age < self.config.max_age
+        self.creatures.retain(|c| !c.is_dead());
 
         // 7. Reproduction phase
         self.reproduce(rng);
@@ -270,13 +263,13 @@ impl Island {
         self.creatures[winner_idx].add_energy(food_eaten as f64);
         self.creatures[winner_idx].food_eaten += food_eaten;
 
-        // Losers take reduced damage (25% of winner's combat power instead of 100%)
+        // Losers take damage to health (25% of winner's combat power)
         for (loser_idx, _) in combatants.iter().skip(1) {
-            self.creatures[*loser_idx].energy -= winner_power * 0.25;
+            self.creatures[*loser_idx].take_damage(winner_power * 0.25);
         }
     }
 
-    /// Handle reproduction
+    /// Handle reproduction with population control
     fn reproduce<R: Rng>(&mut self, rng: &mut R) {
         let mut new_creatures = Vec::new();
 
@@ -284,6 +277,10 @@ impl Island {
         if self.creatures.len() < 2 {
             return;
         }
+
+        // Calculate population limit: half of total world area
+        let world_area = self.config.world_width * self.config.world_height;
+        let population_limit = world_area / 2;
 
         // Shuffle to randomize mating pairs
         let mut indices: Vec<usize> = (0..self.creatures.len()).collect();
@@ -309,6 +306,21 @@ impl Island {
 
                 // Create offspring
                 if let Some(child) = left.reproduce(right, self.config.mutation_rate) {
+                    // Check if we're at population limit
+                    if self.creatures.len() + new_creatures.len() >= population_limit {
+                        // Find creature with lowest health and zero energy to remove
+                        if let Some(remove_idx) = self.find_weakest_creature() {
+                            // Track stats before removal
+                            let removed = self.creatures.remove(remove_idx);
+                            if let Some(stats) = self.genome_stats.get_mut(&removed.genome_id) {
+                                stats.total_food_eaten += removed.food_eaten;
+                            }
+                        } else {
+                            // No creature with zero energy found, block spawning
+                            continue;
+                        }
+                    }
+
                     // Track lineage
                     if let Some(stats) = self.genome_stats.get_mut(&child.genome_id) {
                         stats.total_spawned += 1;
@@ -320,6 +332,24 @@ impl Island {
 
         // Add new creatures
         self.creatures.extend(new_creatures);
+    }
+
+    /// Find the creature with lowest health and zero energy
+    /// Returns None if no creature has zero energy
+    fn find_weakest_creature(&self) -> Option<usize> {
+        let mut weakest_idx: Option<usize> = None;
+        let mut lowest_health = f64::MAX;
+
+        for (idx, creature) in self.creatures.iter().enumerate() {
+            if creature.energy <= 0.0 {
+                if weakest_idx.is_none() || creature.health < lowest_health {
+                    weakest_idx = Some(idx);
+                    lowest_health = creature.health;
+                }
+            }
+        }
+
+        weakest_idx
     }
 
     /// Collect survival statistics for all genomes
@@ -335,17 +365,11 @@ impl Island {
         // Create stats for each genome we tracked
         for (genome_id, lineage) in &self.genome_stats {
             let survived = *survivors.get(genome_id).unwrap_or(&0);
-            let avg_lifespan = if lineage.total_spawned > 0 {
-                lineage.total_lifespan as f64 / lineage.total_spawned as f64
-            } else {
-                0.0
-            };
 
             results.push(SurvivalStats {
                 genome_id: *genome_id,
                 survived,
                 total_spawned: lineage.total_spawned,
-                avg_lifespan,
                 total_food_eaten: lineage.total_food_eaten,
             });
         }
